@@ -39,7 +39,7 @@ Each one is a real interactive player, not a static description:
 5. **Word Repetition** — multi-syllable words on the same rhythm engine
 6. **Mirror Practice** — front camera as a mirror, live only, never recorded
 7. **Loud Reading** — stories, quotes, articles and tongue twisters
-8. **Relaxation** — jaw, tongue, lip and neck sequence
+8. **Relaxation** — jaw, tongue, lip and neck sequences
 
 Three Phase 2 exercises (vowel practice, tongue twisters, conversation practice)
 appear in the library as locked previews so the catalogue shape is already right.
