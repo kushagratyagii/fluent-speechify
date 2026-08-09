@@ -15,6 +15,7 @@ import type { Assessment, Profile, ProgressStats } from "@/types";
 
 interface AppData {
   ready: boolean;
+  error: string | null;
   profile: Profile | null;
   assessment: Assessment | null;
   today: TodayStatus | null;
@@ -32,32 +33,48 @@ const AppDataContext = createContext<AppData | null>(null);
  */
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [today, setToday] = useState<TodayStatus | null>(null);
   const [stats, setStats] = useState<ProgressStats | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextProfile, nextAssessment] = await Promise.all([
-      profileService.getProfile(),
-      profileService.getAssessment(),
-    ]);
-    setProfile(nextProfile);
-    setAssessment(nextAssessment);
+    try {
+      setError(null);
 
-    // The plan is only meaningful once the assessment exists.
-    if (nextProfile && nextAssessment) {
-      const [nextToday, nextStats] = await Promise.all([
-        planService.getTodayStatus(),
-        progressService.getStats(),
+      const [nextProfile, nextAssessment] = await Promise.all([
+        profileService.getProfile(),
+        profileService.getAssessment(),
       ]);
-      setToday(nextToday);
-      setStats(nextStats);
-    } else {
-      setToday(null);
-      setStats(await progressService.getStats());
+      setProfile(nextProfile);
+      setAssessment(nextAssessment);
+
+      // The plan is only meaningful once the assessment exists.
+      if (nextProfile && nextAssessment) {
+        const [nextToday, nextStats] = await Promise.all([
+          planService.getTodayStatus(),
+          progressService.getStats(),
+        ]);
+        setToday(nextToday);
+        setStats(nextStats);
+      } else {
+        setToday(null);
+        setStats(await progressService.getStats());
+      }
+      setReady(true);
+    } catch (err) {
+      // Storage can throw in private-browsing modes, when quota is exceeded,
+      // or when a stored record no longer matches the expected shape after
+      // an update. Surface it instead of leaving the shell stuck loading.
+      console.error("Failed to load app data", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong loading your data.",
+      );
+      setReady(true);
     }
-    setReady(true);
   }, []);
 
   useEffect(() => {
@@ -70,6 +87,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppData>(
     () => ({
       ready,
+      error,
       profile,
       assessment,
       today,
@@ -77,7 +95,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       onboarded: Boolean(profile && assessment),
       refresh,
     }),
-    [ready, profile, assessment, today, stats, refresh],
+    [ready, error, profile, assessment, today, stats, refresh],
   );
 
   return (

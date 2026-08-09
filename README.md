@@ -9,7 +9,35 @@ npm install
 npm run dev     # http://localhost:3000
 npm run build
 npm run lint
+npm test        # vitest, run once
+npm run test:watch     # vitest, watch mode
+npm run test:coverage  # vitest with coverage report
 ```
+
+## Testing
+
+Unit and integration tests run on [Vitest](https://vitest.dev) with jsdom and
+Testing Library, covering the layers that matter most for correctness:
+
+- `src/utils/__tests__/date.ts` — date-key math, week/day ranges, formatting
+- `src/lib/__tests__/gamification.service.test.ts` — XP scaling, leveling, streak
+  advance/reset logic
+- `src/lib/__tests__/storage.test.ts` — the `localStorage` adapter, including a
+  test that data survives a simulated page reload
+- `src/lib/__tests__/session-progress-integration.test.ts` — end-to-end:
+  completing an exercise correctly updates XP, streak, progress stats and
+  today's plan, all through the same repository layer the UI uses
+
+## Loading & error states
+
+- `AppShell` shows a spinner while device storage loads, and a retry screen
+  (rather than an infinite spinner) if reading it fails.
+- `src/app/error.tsx` and `global-error.tsx` catch unexpected render errors
+  per-route and at the root, each with a "try again" action.
+- `src/app/not-found.tsx` handles unknown routes.
+- `src/app/(app)/loading.tsx` covers route-transition loading.
+- Dashboard and Progress show skeleton placeholders (not a blank screen)
+  while their data loads.
 
 ## What is built
 

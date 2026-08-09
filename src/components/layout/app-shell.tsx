@@ -9,8 +9,11 @@ import {
   Dumbbell,
   Home,
   Loader2,
+  RefreshCw,
+  TriangleAlert,
   User,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAppData } from "@/hooks/use-app-data";
 
@@ -34,11 +37,32 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { ready, onboarded } = useAppData();
+  const { ready, error, onboarded, refresh } = useAppData();
 
   useEffect(() => {
-    if (ready && !onboarded) router.replace("/onboarding");
-  }, [ready, onboarded, router]);
+    if (ready && !error && !onboarded) router.replace("/onboarding");
+  }, [ready, error, onboarded, router]);
+
+  if (ready && error) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+        <span className="grid size-12 place-items-center rounded-full bg-destructive/10 text-destructive">
+          <TriangleAlert className="size-6" />
+        </span>
+        <div className="space-y-1">
+          <p className="font-medium">Couldn&apos;t load your data</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            {error} Your practice data is saved on this device — try again,
+            or reload the page.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => void refresh()}>
+          <RefreshCw className="size-4" />
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (!ready || !onboarded) {
     return (

@@ -11,6 +11,7 @@ import {
   weekdayLabel,
 } from "./practice-charts";
 import { PracticeCalendar } from "./practice-calendar";
+import { ProgressSkeleton } from "./progress-skeleton";
 import { cn } from "@/lib/utils";
 import { progressService } from "@/lib/services/progress.service";
 import { useAppData } from "@/hooks/use-app-data";
@@ -45,7 +46,7 @@ export function ProgressView() {
     });
   }, []);
 
-  if (!stats) return null;
+  if (!stats) return <ProgressSkeleton />;
 
   const chartData = range === "week" ? week : month;
   const peakMinutes = Math.max(0, ...breakdown.map((b) => b.minutes));

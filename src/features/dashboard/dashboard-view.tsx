@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer } from "@/components/layout/page-header";
+import { DashboardSkeleton } from "@/features/dashboard/dashboard-skeleton";
 import { StatTile, WeekStrip } from "@/features/dashboard/stat-tiles";
 import { useAppData } from "@/hooks/use-app-data";
 import { GOAL_LABELS } from "@/lib/services/profile.service";
@@ -38,7 +39,7 @@ export function DashboardView() {
     void progressService.getCurrentWeek().then(setWeek);
   }, [today]);
 
-  if (!profile || !today || !stats) return null;
+  if (!profile || !today || !stats) return <DashboardSkeleton />;
 
   const firstName = profile.name.split(" ")[0];
   const allDone = today.completedCount === today.totalCount;
