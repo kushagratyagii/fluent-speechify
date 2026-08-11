@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sessionService } from "@/lib/services/session.service";
 import { progressService } from "@/lib/services/progress.service";
 import { planService } from "@/lib/services/plan.service";
+import { authService } from "@/lib/services/auth.service";
 import { profileRepository, assessmentRepository } from "@/lib/repositories/profile.repository";
 import { toDateKey } from "@/utils/date";
 import type { Assessment, Profile } from "@/types";
@@ -29,8 +30,11 @@ const ASSESSMENT: Assessment = {
 };
 
 describe("session -> progress -> plan integration", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     window.localStorage.clear();
+    // Practice data is scoped to the signed-in account, so every test needs
+    // one — this mirrors AppShell's real auth gate.
+    await authService.signUp({ name: "Asha Verma", email: "asha@example.com", password: "password123" });
   });
 
   it("does not credit a session shorter than 10 seconds", async () => {
@@ -116,5 +120,32 @@ describe("session -> progress -> plan integration", () => {
     expect(second.items.map((i) => i.exerciseId)).toEqual(
       first.items.map((i) => i.exerciseId),
     );
+  });
+
+  it("keeps each account's practice data completely separate", async () => {
+    // Asha (signed up in beforeEach) completes a session.
+    await sessionService.complete({
+      exerciseId: "ex-deep-breathing",
+      difficulty: "beginner",
+      elapsedSeconds: 120,
+      targetSeconds: 120,
+      startedAt: new Date().toISOString(),
+    });
+    expect((await progressService.getStats()).totalXp).toBe(20);
+
+    // A second account, on the same device, must start completely fresh —
+    // this is the exact bug report: a new sign-up must not inherit another
+    // account's XP/streak/history.
+    await authService.logout();
+    await authService.signUp({ name: "Rohan", email: "rohan@example.com", password: "password123" });
+    const rohanStats = await progressService.getStats();
+    expect(rohanStats.totalXp).toBe(0);
+    expect(rohanStats.totalSessions).toBe(0);
+    expect(rohanStats.streak.current).toBe(0);
+
+    // And logging back into Asha's account must still show her own data.
+    await authService.logout();
+    await authService.login({ email: "asha@example.com", password: "password123" });
+    expect((await progressService.getStats()).totalXp).toBe(20);
   });
 });

@@ -11,28 +11,36 @@ export function StatTile({
   unit,
   icon,
   accent,
+  warm,
 }: {
   label: string;
   value: string | number;
   unit?: string;
   icon?: React.ReactNode;
   accent?: boolean;
+  /** Reserved for the streak/XP "spark" moments — use sparingly. */
+  warm?: boolean;
 }) {
   return (
     <Card
       className={cn(
         "gap-0 p-4",
-        accent && "border-primary/30 bg-primary/5",
+        accent && !warm && "border-primary/30 bg-primary/5",
+        warm && "border-warm/30 bg-warm/8",
       )}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
           {label}
         </span>
-        {icon ? <span className="text-muted-foreground">{icon}</span> : null}
+        {icon ? (
+          <span className={warm ? "text-warm" : "text-muted-foreground"}>
+            {icon}
+          </span>
+        ) : null}
       </div>
       <div className="mt-2 flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">
+        <span className="font-heading text-2xl font-semibold tabular-nums tracking-tight">
           {value}
         </span>
         {unit ? (

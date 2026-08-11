@@ -11,11 +11,14 @@ import {
 import { planService, type TodayStatus } from "@/lib/services/plan.service";
 import { profileService } from "@/lib/services/profile.service";
 import { progressService } from "@/lib/services/progress.service";
-import type { Assessment, Profile, ProgressStats } from "@/types";
+import { authService } from "@/lib/services/auth.service";
+import type { Account, Assessment, Profile, ProgressStats } from "@/types";
 
 interface AppData {
   ready: boolean;
   error: string | null;
+  authenticated: boolean;
+  account: Account | null;
   profile: Profile | null;
   assessment: Assessment | null;
   today: TodayStatus | null;
@@ -34,6 +37,8 @@ const AppDataContext = createContext<AppData | null>(null);
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [account, setAccount] = useState<Account | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [today, setToday] = useState<TodayStatus | null>(null);
@@ -42,6 +47,22 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       setError(null);
+
+      const currentAccount = await authService.getAccount();
+      const isAuthenticated = Boolean(currentAccount);
+      setAccount(currentAccount);
+      setAuthenticated(isAuthenticated);
+
+      if (!isAuthenticated) {
+        // No point reading practice data for a signed-out session — leave
+        // it cleared so a previous account's data can't flash on screen.
+        setProfile(null);
+        setAssessment(null);
+        setToday(null);
+        setStats(null);
+        setReady(true);
+        return;
+      }
 
       const [nextProfile, nextAssessment] = await Promise.all([
         profileService.getProfile(),
@@ -88,6 +109,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ready,
       error,
+      authenticated,
+      account,
       profile,
       assessment,
       today,
@@ -95,7 +118,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       onboarded: Boolean(profile && assessment),
       refresh,
     }),
-    [ready, error, profile, assessment, today, stats, refresh],
+    [ready, error, authenticated, account, profile, assessment, today, stats, refresh],
   );
 
   return (

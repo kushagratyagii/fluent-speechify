@@ -14,6 +14,16 @@ npm run test:watch     # vitest, watch mode
 npm run test:coverage  # vitest with coverage report
 ```
 
+## Local auth
+
+There's a real login/signup screen (`/login`), but "real" is device-local:
+one account lives in `localStorage`, the password is hashed with the
+browser's Web Crypto API (SHA-256 + a per-account salt) before it's stored,
+and nothing is sent to a server — because there is no server yet. See
+`src/lib/services/auth.service.ts`. Swapping this for real backend auth
+(Supabase, NextAuth, etc.) only touches that one file and the repository it
+calls; nothing above the service layer needs to change.
+
 ## Testing
 
 Unit and integration tests run on [Vitest](https://vitest.dev) with jsdom and
@@ -43,6 +53,7 @@ Testing Library, covering the layers that matter most for correctness:
 
 | Roadmap item | Status |
 | --- | --- |
+| Local sign up / log in (device-only account, hashed password) | ✅ |
 | Onboarding: profile (name, age, gender, languages, country) | ✅ |
 | Initial assessment: difficulties, severity, situations, goals | ✅ |
 | Personalised daily plan generated from the assessment | ✅ |
@@ -51,7 +62,7 @@ Testing Library, covering the layers that matter most for correctness:
 | Session summary: duration, exercises completed, streak, XP | ✅ |
 | Progress: daily calendar, weekly chart, monthly chart, longest streak, total time | ✅ |
 | Gamification: XP, levels, badges, achievements, streak rewards | ✅ |
-| Auth (email, Google, reset) | ⛔️ deferred — see *Adding the backend* |
+| Backend-verified auth (real server, password reset, Google) | ⛔️ deferred — see *Adding the backend* |
 | Supabase persistence | ⛔️ deferred |
 | Stammering analysis (FastAPI + ML model, opt-in mic recording in reading/repetition exercises) | 🟡 built, model untrained — see `backend/README.md` |
 | Phase 2+ (therapy programs, journal, therapist portal, AI) | ⛔️ not started |

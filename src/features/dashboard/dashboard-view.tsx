@@ -50,7 +50,7 @@ export function DashboardView() {
     <PageContainer>
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">{greeting()}</p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
           {firstName}, {allDone ? "today is done." : "ready to practise?"}
         </h1>
       </header>
@@ -61,13 +61,13 @@ export function DashboardView() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <Card className="overflow-hidden border-primary/25 bg-linear-to-br from-primary/10 to-transparent">
+        <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/12 via-primary/4 to-transparent">
           <CardContent className="flex flex-wrap items-center justify-between gap-5">
             <div className="min-w-0 space-y-1.5">
               <p className="text-xs font-medium uppercase tracking-wide text-primary">
                 {allDone ? "Session complete" : "Next up"}
               </p>
-              <p className="text-lg font-semibold">
+              <p className="font-heading text-lg font-semibold">
                 {allDone
                   ? "You finished every exercise today"
                   : nextExercise?.title}
@@ -102,7 +102,7 @@ export function DashboardView() {
           value={stats.streak.current}
           unit={stats.streak.current === 1 ? "day" : "days"}
           icon={<Flame className="size-4" />}
-          accent={stats.streak.current > 0}
+          warm={stats.streak.current > 0}
         />
         <StatTile
           label="Practised today"
@@ -121,6 +121,7 @@ export function DashboardView() {
           value={stats.totalXp}
           unit="xp"
           icon={<Zap className="size-4" />}
+          warm={stats.totalXp > 0}
         />
       </div>
 

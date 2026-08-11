@@ -80,13 +80,14 @@ export function ProgressView() {
           value={stats.streak.current}
           unit="days"
           icon={<Flame className="size-4" />}
-          accent={stats.streak.current > 0}
+          warm={stats.streak.current > 0}
         />
         <StatTile
           label="Longest streak"
           value={stats.streak.longest}
           unit="days"
           icon={<Trophy className="size-4" />}
+          warm={stats.streak.longest > 0}
         />
       </div>
 

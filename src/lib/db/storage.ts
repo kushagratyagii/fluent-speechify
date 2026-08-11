@@ -85,8 +85,11 @@ export function getStorage(): StorageAdapter {
   return typeof window === "undefined" ? memoryAdapter : localAdapter;
 }
 
-export async function clearAllData(): Promise<void> {
+export async function clearAllData(accountId: string): Promise<void> {
+  // Only this account's practice data (`account:{id}:...`) is removed — the
+  // account directory and other accounts on this device are untouched.
   const storage = getStorage();
-  const keys = await storage.keys("");
+  const prefix = `account:${accountId}:`;
+  const keys = await storage.keys(prefix);
   await Promise.all(keys.map((k) => storage.remove(k)));
 }

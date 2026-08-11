@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, TriangleAlert } from "lucide-react";
+import { Loader2, LogOut, Save, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageContainer, PageHeader } from "@/components/layout/page-header";
 import { useAppData } from "@/hooks/use-app-data";
+import { authService } from "@/lib/services/auth.service";
+import { accountRepository } from "@/lib/repositories/account.repository";
 import { clearAllData } from "@/lib/db/storage";
 import { GOAL_LABELS, profileService } from "@/lib/services/profile.service";
 import {
@@ -33,16 +35,33 @@ import {
 
 export function ProfileView() {
   const router = useRouter();
-  const { profile, assessment, stats, refresh } = useAppData();
+  const { profile, assessment, stats, account, refresh } = useAppData();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
 
-  if (!profile) return null;
+  if (!profile || !account) return null;
 
   async function resetEverything() {
-    await clearAllData();
+    // Practice history only — the account stays logged in.
+    await clearAllData(account!.id);
     await refresh();
     toast.success("All practice data cleared");
     router.replace("/onboarding");
+  }
+
+  async function handleLogout() {
+    await authService.logout();
+    await refresh();
+    router.replace("/login");
+  }
+
+  async function deleteAccount() {
+    await clearAllData(account!.id);
+    await accountRepository.remove(account!.id);
+    await authService.logout();
+    await refresh();
+    toast.success("Account and all data deleted");
+    router.replace("/login");
   }
 
   return (
@@ -54,6 +73,21 @@ export function ProfileView() {
 
       {/* Keyed on the profile id so the form re-initialises if it is replaced. */}
       <ProfileForm key={profile.id} profile={profile} onSaved={refresh} />
+
+      {account ? (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between gap-3">
+            <CardTitle>Account</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => void handleLogout()}>
+              <LogOut className="size-4" />
+              Log out
+            </Button>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Signed in as <span className="text-foreground">{account.email}</span>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {assessment ? (
         <Card>
@@ -129,7 +163,7 @@ export function ProfileView() {
           <p className="text-sm text-muted-foreground">
             Practice history, streaks, XP and achievements are stored only on
             this device. Clearing removes all of it permanently and cannot be
-            undone.
+            undone. You&apos;ll stay logged in and can build a new plan.
           </p>
           {confirmReset ? (
             <div className="flex flex-wrap gap-2">
@@ -147,6 +181,37 @@ export function ProfileView() {
           )}
         </CardContent>
       </Card>
+
+      {account ? (
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="size-4" />
+              Delete account
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Permanently deletes the account ({account.email}) and all
+              practice data on this device, and signs you out.
+            </p>
+            {confirmDeleteAccount ? (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="destructive" onClick={deleteAccount}>
+                  Yes, delete my account
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmDeleteAccount(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setConfirmDeleteAccount(true)}>
+                Delete account
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </PageContainer>
   );
 }

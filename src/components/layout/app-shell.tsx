@@ -9,13 +9,16 @@ import {
   Dumbbell,
   Home,
   Loader2,
+  LogOut,
   RefreshCw,
   TriangleAlert,
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logomark } from "@/components/ui/logomark";
 import { cn } from "@/lib/utils";
 import { useAppData } from "@/hooks/use-app-data";
+import { authService } from "@/lib/services/auth.service";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -37,11 +40,22 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { ready, error, onboarded, refresh } = useAppData();
+  const { ready, error, authenticated, onboarded, refresh } = useAppData();
 
   useEffect(() => {
-    if (ready && !error && !onboarded) router.replace("/onboarding");
-  }, [ready, error, onboarded, router]);
+    if (!ready || error) return;
+    if (!authenticated) {
+      router.replace("/login");
+    } else if (!onboarded) {
+      router.replace("/onboarding");
+    }
+  }, [ready, error, authenticated, onboarded, router]);
+
+  async function handleLogout() {
+    await authService.logout();
+    await refresh();
+    router.replace("/login");
+  }
 
   if (ready && error) {
     return (
@@ -64,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!ready || !onboarded) {
+  if (!ready || !authenticated || !onboarded) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -76,8 +90,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-dvh w-full">
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar px-3 py-6 md:flex">
         <Link href="/dashboard" className="mb-8 flex items-center gap-2 px-3">
-          <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground font-semibold">
-            F
+          <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <Logomark className="size-5" />
           </span>
           <span className="text-lg font-semibold tracking-tight">Fluent</span>
         </Link>
@@ -103,6 +117,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <p className="mt-auto px-3 text-xs leading-relaxed text-muted-foreground">
           Practice data is stored on this device only.
         </p>
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          className="mt-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+        >
+          <LogOut className="size-4.5" />
+          Log out
+        </button>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

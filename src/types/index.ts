@@ -27,6 +27,23 @@ export type Goal =
 
 export type Gender = "male" | "female" | "other" | "prefer_not_to_say";
 
+/**
+ * Local-only auth identity. This is intentionally simple: the password is
+ * hashed with the browser's Web Crypto API (SHA-256 + a random per-account
+ * salt) rather than sent to a server, because there is no server. This is
+ * NOT production-grade auth — it stops a shared computer from casually
+ * reading a plaintext password in devtools, nothing more. Swapping this for
+ * real auth (Supabase, NextAuth, etc.) only touches auth.service.ts.
+ */
+export interface Account {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  passwordSalt: string;
+  createdAt: string;
+}
+
 export interface Profile {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ChoiceCard, ChoiceChip, NativeSelect } from "@/components/ui/choice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Logomark } from "@/components/ui/logomark";
 import { useAppData } from "@/hooks/use-app-data";
 import { profileService } from "@/lib/services/profile.service";
 import {
@@ -47,20 +48,28 @@ function toggle<T>(list: T[], value: T): T[] {
 
 export function OnboardingWizard() {
   const router = useRouter();
-  const { refresh } = useAppData();
+  const { ready, authenticated, account, refresh } = useAppData();
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [saving, setSaving] = useState(false);
 
-  const [profile, setProfile] = useState<ProfileInput>({
-    name: "",
+  // Lazy initializer reads whatever account is already in context at first
+  // render (it's loaded by the provider before signup redirects here), so
+  // no effect is needed to sync it in afterwards.
+  const [profile, setProfile] = useState<ProfileInput>(() => ({
+    name: account?.name ?? "",
     age: null,
     gender: null,
     preferredLanguage: "English",
     nativeLanguage: "English",
     country: "India",
-  });
+  }));
+
+  useEffect(() => {
+    if (ready && !authenticated) router.replace("/login");
+  }, [ready, authenticated, router]);
+
   const [profileErrors, setProfileErrors] = useState<
     ValidationErrors<ProfileInput>
   >({});
@@ -123,6 +132,14 @@ export function OnboardingWizard() {
   }
 
   const isLast = step === STEPS.length - 1;
+
+  if (!ready || !authenticated) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 py-8 sm:px-6">
@@ -374,12 +391,12 @@ function WelcomeStep() {
   return (
     <div className="space-y-6 py-6 text-center">
       <motion.div
-        className="mx-auto grid size-20 place-items-center rounded-3xl bg-primary text-3xl font-semibold text-primary-foreground"
+        className="mx-auto grid size-20 place-items-center rounded-3xl bg-primary text-primary-foreground"
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 180, damping: 16 }}
       >
-        F
+        <Logomark className="size-10" />
       </motion.div>
       <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight">

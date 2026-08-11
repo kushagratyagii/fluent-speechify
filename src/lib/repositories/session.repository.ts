@@ -1,5 +1,6 @@
 import { StorageKeys } from "@/lib/db/keys";
 import { getStorage } from "@/lib/db/storage";
+import { requireCurrentAccountId } from "@/lib/repositories/account.repository";
 import type { ExerciseSession } from "@/types";
 import { toDateKey } from "@/utils/date";
 
@@ -10,7 +11,8 @@ import { toDateKey } from "@/utils/date";
  */
 export const sessionRepository = {
   async list(): Promise<ExerciseSession[]> {
-    const rows = await getStorage().get<ExerciseSession[]>(StorageKeys.sessions);
+    const accountId = await requireCurrentAccountId();
+    const rows = await getStorage().get<ExerciseSession[]>(StorageKeys.sessions(accountId));
     return rows ?? [];
   },
 
@@ -20,13 +22,15 @@ export const sessionRepository = {
   },
 
   async create(session: ExerciseSession): Promise<ExerciseSession> {
+    const accountId = await requireCurrentAccountId();
     const rows = await this.list();
     rows.push(session);
-    await getStorage().set(StorageKeys.sessions, rows);
+    await getStorage().set(StorageKeys.sessions(accountId), rows);
     return session;
   },
 
   async clear(): Promise<void> {
-    await getStorage().remove(StorageKeys.sessions);
+    const accountId = await requireCurrentAccountId();
+    await getStorage().remove(StorageKeys.sessions(accountId));
   },
 };
