@@ -18,7 +18,7 @@ const API_BASE_URL =
 
 /** The backend is a separate optional service -- give up well before the
  * user would notice the UI hanging, rather than blocking the save flow. */
-const ANALYZE_TIMEOUT_MS = 10*60*1000;
+const ANALYZE_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 3_000;
 
 export class AnalysisUnavailableError extends Error {}

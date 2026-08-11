@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logomark } from "@/components/ui/logomark";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useAppData } from "@/hooks/use-app-data";
 import { AuthError, authService } from "@/lib/services/auth.service";
 import { hasErrors } from "@/lib/validations/profile";
@@ -76,7 +77,8 @@ export function AuthView() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-primary/8 via-background to-warm/8 px-4 py-10">
+    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-primary/8 via-background to-warm/8 px-4 py-10">
+      <ThemeToggle className="absolute right-4 top-4" />
       <div className="w-full max-w-md space-y-6">
         <div className="space-y-2 text-center">
           <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logomark } from "@/components/ui/logomark";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { useAppData } from "@/hooks/use-app-data";
 import { authService } from "@/lib/services/auth.service";
@@ -114,7 +115,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <p className="mt-auto px-3 text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-auto flex items-center justify-between px-3 py-2">
+          <span className="text-xs font-medium text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
+        <p className="px-3 text-xs leading-relaxed text-muted-foreground">
           Practice data is stored on this device only.
         </p>
         <button
@@ -128,6 +133,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <Logomark className="size-4.5" />
+            </span>
+            <span className="font-semibold tracking-tight">Fluent</span>
+          </Link>
+          <ThemeToggle />
+        </header>
         <main className="flex-1 pb-24 md:pb-10">{children}</main>
       </div>
 
