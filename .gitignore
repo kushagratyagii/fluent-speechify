@@ -52,4 +52,9 @@ yarn-error.log*
 next-env.d.ts
 
 # Local ML archive
-/backend/ml.zip
+/backend/ml.zip   
+
+
+// env related 
+.env.local
+.env*.local

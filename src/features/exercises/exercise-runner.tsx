@@ -110,12 +110,27 @@ export function ExerciseRunner({
       let analysis: SpeechAnalysis | undefined;
       if (recordingEnabled && recorder.state !== "idle") {
         setAnalyzing(true);
-        try {
-          const blob = await recorder.stop();
-          if (blob) analysis = await analysisService.analyze(blob);
-        } catch {
-          toast.error("Could not analyze your recording — session saved without it.");
-        }
+       try {
+  const blob = await recorder.stop();
+
+  if (!blob) {
+    throw new Error("No audio recording was created.");
+  }
+
+  console.log("Recording blob created:", blob.size, blob.type);
+
+  analysis = await analysisService.analyze(blob);
+
+  console.log("ANALYSIS SUCCESS:", analysis);
+} catch (error) {
+  console.error("ANALYSIS ERROR:", error);
+
+  toast.error(
+    error instanceof Error
+      ? error.message
+      : "Could not analyze your recording.",
+  );
+}
         setAnalyzing(false);
       }
 
