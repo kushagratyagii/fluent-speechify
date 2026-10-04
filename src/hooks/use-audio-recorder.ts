@@ -88,6 +88,12 @@ export function useAudioRecorder() {
 
   /** Stops recording and releases the mic, resolving with the full clip. */
   const stop = useCallback((): Promise<Blob | null> => {
+    console.log(
+      "[AudioRecorder] stop called:",
+      mediaRecorderRef.current?.state,
+      "chunks:",
+      chunksRef.current.length,
+    );
     return new Promise((resolve) => {
       const recorder = mediaRecorderRef.current;
       if (!recorder || recorder.state === "inactive") {

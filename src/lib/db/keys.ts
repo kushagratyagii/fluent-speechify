@@ -25,6 +25,9 @@ export const StorageKeys = {
   streak: (accountId: string) => `account:${accountId}:streak`,
   achievements: (accountId: string) => `account:${accountId}:achievements`,
   activeSession: (accountId: string) => `account:${accountId}:active_session`,
+  personalization: (accountId: string) =>
+    `account:${accountId}:speech_personalization`,
+  
 
   legacyProfile: "profiles:current",
   legacyAssessment: "assessments:current",

@@ -1,3 +1,4 @@
+import { personalizationService } from "@/lib/services/personalization.service";
 import { getExerciseById } from "@/data/exercises";
 import { sessionRepository } from "@/lib/repositories/session.repository";
 import { gamificationService } from "@/lib/services/gamification.service";
@@ -60,6 +61,9 @@ export const sessionService = {
     };
 
     await sessionRepository.create(session);
+    if (input.analysis) {
+      await personalizationService.recordAnalysis(input.analysis);
+    }
 
     const dateKey = toDateKey(new Date(endedAt));
     const streak = completed
