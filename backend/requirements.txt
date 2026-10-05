@@ -1,19 +1,35 @@
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
+uvicorn==0.30.6
 python-multipart==0.0.9
-pydantic==2.9.2
-pydantic-settings==2.5.2
+python-dotenv==1.2.2
 
+# Speech / Audio / ML
+faster-whisper==1.2.1
+librosa==0.10.2.post1
+soundfile==0.12.1
+av==18.1.0
+numpy==1.26.4
+scipy==1.17.1
 torch==2.4.1
 torchaudio==2.4.1
 transformers==4.44.2
+huggingface_hub==0.36.2
+safetensors==0.8.0
+onnxruntime==1.30.0
 
-librosa==0.10.2.post1
-soundfile==0.12.1
-numpy==1.26.4
+# Data / ML utilities
 pandas==2.2.2
 scikit-learn==1.5.1
-httpx
-# only needed for ml/ (training), not for serving the API
-tqdm==4.66.5
-tensorboard==2.17.1
+joblib==1.5.3
+
+# LLM / LangChain
+openai==3.24.0
+langchain==1.4.3
+langchain-core==1.6.6
+langchain-openai==1.6.7
+langgraph==1.2.12
+langgraph-checkpoint==4.2.0
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.5
+langsmith==0.14.4
+tiktoken==0.14.0
