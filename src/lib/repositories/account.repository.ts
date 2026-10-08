@@ -1,6 +1,8 @@
+import { supabase } from "@/lib/supabase";
 import { StorageKeys } from "@/lib/db/keys";
 import { getStorage } from "@/lib/db/storage";
 import type { Account } from "@/types";
+
 
 /**
  * The account "directory". Multiple accounts can live on one device/browser
@@ -61,9 +63,18 @@ export const authSessionRepository = {
  * gate has already confirmed someone is signed in.
  */
 export async function requireCurrentAccountId(): Promise<string> {
-  const accountId = await authSessionRepository.getCurrentAccountId();
-  if (!accountId) {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!user) {
     throw new Error("No account is signed in.");
   }
-  return accountId;
+
+  return user.id;
 }

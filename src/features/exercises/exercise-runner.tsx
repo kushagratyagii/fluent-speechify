@@ -221,60 +221,27 @@ export function ExerciseRunner({
 
       if (recordingEnabled) {
         setAnalyzing(true);
+       try {
+  const blob = await recorder.stop();
 
-        try {
-          const blob = await recorder.stop();
+  if (!blob) {
+    throw new Error("No audio recording was created.");
+  }
 
-          if (blob) {
-            /**
-             * Give the backend the most recent personalization history
-             * for this exercise. The backend can use this to generate
-             * progressively different and more relevant passages.
-             */
-            const previousSessions =
-              await sessionService.listAll();
+  console.log("Recording blob created:", blob.size, blob.type);
 
-            const personalizationHistory: PersonalizationHistoryItem[] =
-              previousSessions
-                .filter(
-                  (session) =>
-                    session.exerciseId === exercise.id &&
-                    session.analysis?.personalizedExercise,
-                )
-                .slice(-5)
-                .map((session) => ({
-                  targetWords:
-                    session.analysis?.personalizedExercise
-                      ?.targetWords ??
-                    session.analysis?.targetWords.map(
-                      (word) => word.word,
-                    ) ??
-                    [],
+  analysis = await analysisService.analyze(blob);
 
-                  personalizedText:
-                    session.analysis?.personalizedExercise?.text ??
-                    "",
+  console.log("ANALYSIS SUCCESS:", analysis);
+} catch (error) {
+  console.error("ANALYSIS ERROR:", error);
 
-                  dominantDisfluencyType:
-                    session.analysis?.dominantDisfluencyType ??
-                    null,
-
-                  severityScore:
-                    session.analysis?.overallSeverityScore ?? 0,
-                }));
-
-            analysis = await analysisService.analyze(
-              blob,
-              undefined,
-              personalizationHistory,
-            );
-          }
-        } catch {
-          toast.error(
-            "Could not analyze your recording — session saved without it.",
-          );
-        }
-
+  toast.error(
+    error instanceof Error
+      ? error.message
+      : "Could not analyze your recording.",
+  );
+}
         setAnalyzing(false);
       }
 
