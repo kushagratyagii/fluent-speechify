@@ -22,6 +22,18 @@ class ClipPrediction(BaseModel):
     severity_score: float = Field(ge=0, le=100)
 
 
+class TargetWord(BaseModel):
+    word: str
+    score: float = Field(ge=0)
+    evidence_count: int = Field(ge=1)
+
+
+class PersonalizedExercise(BaseModel):
+    title: str
+    text: str
+    target_words: list[str] = Field(default_factory=list)
+    syllable_items: list[str] = Field(default_factory=list)
+
 class AnalyzeResponse(BaseModel):
     session_id: str | None = Field(default=None, description="Echoes the caller's exercise-session id, if provided")
     duration_seconds: float
@@ -34,6 +46,13 @@ class AnalyzeResponse(BaseModel):
     dominant_disfluency_type: str | None = Field(
         default=None, description="Most frequent disfluency type across stuttered clips, or null if none"
     )
+
+    # Personalization layer. These are optional so the existing frontend can
+    # continue consuming the original analysis response while this feature is
+    # rolled out.
+    transcript: str | None = None
+    target_words: list[TargetWord] = Field(default_factory=list)
+    personalized_exercise: PersonalizedExercise | None = None
 
     model_version: str
     warnings: list[str] = Field(default_factory=list, description="e.g. low audio volume, clip too short, clipping detected")

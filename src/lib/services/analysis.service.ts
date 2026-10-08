@@ -32,6 +32,19 @@ interface RawClipPrediction {
   severity_score: number;
 }
 
+interface RawTargetWord {
+  word: string;
+  score: number;
+  evidence_count: number;
+}
+
+interface RawPersonalizedExercise {
+  title: string;
+  text: string;
+  target_words: string[];
+  syllable_items: string[];
+}
+
 interface RawAnalyzeResponse {
   session_id: string | null;
   duration_seconds: number;
@@ -40,6 +53,9 @@ interface RawAnalyzeResponse {
   overall_severity_score: number;
   overall_severity_bucket: Severity;
   dominant_disfluency_type: string | null;
+  transcript: string | null;
+  target_words: RawTargetWord[];
+  personalized_exercise: RawPersonalizedExercise | null;
   model_version: string;
   warnings: string[];
 }
@@ -65,9 +81,34 @@ function toAnalysis(raw: RawAnalyzeResponse): SpeechAnalysis {
     dominantDisfluencyType:
       (raw.dominant_disfluency_type as SpeechAnalysis["dominantDisfluencyType"]) ??
       null,
+
+    transcript: raw.transcript,
+
+    targetWords: (raw.target_words ?? []).map((word) => ({
+      word: word.word,
+      score: word.score,
+      evidenceCount: word.evidence_count,
+    })),
+
+    personalizedExercise: raw.personalized_exercise
+      ? {
+          title: raw.personalized_exercise.title,
+          text: raw.personalized_exercise.text,
+          targetWords: raw.personalized_exercise.target_words,
+          syllableItems: raw.personalized_exercise.syllable_items,
+        }
+      : null,
+
     modelVersion: raw.model_version,
     warnings: raw.warnings,
   };
+}
+
+export interface PersonalizationHistoryItem {
+  targetWords: string[];
+  personalizedText: string;
+  dominantDisfluencyType: string | null;
+  severityScore: number;
 }
 
 export const analysisService = {
@@ -81,12 +122,19 @@ export const analysisService = {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+
       const res = await fetch(`${API_BASE_URL}/health`, {
         signal: controller.signal,
       });
+
       clearTimeout(timeout);
+
       if (!res.ok) return false;
-      const body = (await res.json()) as { model_loaded: boolean };
+
+      const body = (await res.json()) as {
+        model_loaded: boolean;
+      };
+
       return body.model_loaded;
     } catch {
       // Network error, timeout, backend not deployed -- all the same to
@@ -101,35 +149,72 @@ export const analysisService = {
    * should catch this and continue the session save without analysis
    * rather than let the whole session fail because the ML service is down.
    */
-  async analyze(audioBlob: Blob, sessionId?: string): Promise<SpeechAnalysis> {
+  async analyze(
+    audioBlob: Blob,
+    sessionId?: string,
+    personalizationHistory: PersonalizationHistoryItem[] = [],
+  ): Promise<SpeechAnalysis> {
     const form = new FormData();
-    const extension = audioBlob.type.includes("mp4") ? "mp4" : "webm";
-    form.append("audio_file", audioBlob, `session.${extension}`);
-    if (sessionId) form.append("session_id", sessionId);
+
+    const extension = audioBlob.type.includes("mp4")
+      ? "mp4"
+      : "webm";
+
+    form.append(
+      "audio_file",
+      audioBlob,
+      `session.${extension}`,
+    );
+
+    if (sessionId) {
+      form.append("session_id", sessionId);
+    }
+
+    if (personalizationHistory.length > 0) {
+      form.append(
+        "personalization_history",
+        JSON.stringify(personalizationHistory),
+      );
+    }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      ANALYZE_TIMEOUT_MS,
+    );
 
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/analyze`, {
-        method: "POST",
-        body: form,
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/v1/analyze`,
+        {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        },
+      );
 
       if (!res.ok) {
         const detail = await res.json().catch(() => null);
+
         throw new AnalysisUnavailableError(
-          detail?.detail ?? `Analysis failed with status ${res.status}`,
+          detail?.detail ??
+            `Analysis failed with status ${res.status}`,
         );
       }
 
       const raw = (await res.json()) as RawAnalyzeResponse;
+
       return toAnalysis(raw);
     } catch (err) {
-      if (err instanceof AnalysisUnavailableError) throw err;
+      if (err instanceof AnalysisUnavailableError) {
+        throw err;
+      }
+
       throw new AnalysisUnavailableError(
-        err instanceof Error ? err.message : "Analysis request failed",
+        err instanceof Error
+          ? err.message
+          : "Analysis request failed",
       );
     } finally {
       clearTimeout(timeout);

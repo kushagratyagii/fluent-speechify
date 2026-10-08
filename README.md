@@ -1,163 +1,424 @@
 # Fluent — Speech Therapy Practice
 
-Phase 1 (MVP) of the speech therapy roadmap: a usable app for building a daily
-speech practice habit. Frontend only — **no backend and no auth yet**. All data
-lives on the device.
+### AI-Enabled Personalized Speech Practice Platform
+
+Fluent Speechify is an AI-assisted speech therapy practice platform designed to help users build a consistent speaking-practice habit through guided exercises, speech analysis, and personalized practice content.
+
+The platform combines a Next.js frontend with a FastAPI-based speech analysis service powered by a multi-task Wav2Vec2 model. After an optional voice recording, the system analyzes fluency patterns, estimates disfluency type and severity, identifies possible practice words, and generates personalized exercises for subsequent sessions.
+
+> **Important:** Fluent Speechify is an educational/practice tool, not a clinical diagnostic system. Speech-analysis results are automated estimates and should not be treated as a clinician's assessment.
+
+---
+
+## ✨ Features
+
+### 🎯 Guided Speech Exercises
+
+The application currently provides multiple interactive exercises with beginner, intermediate, and advanced difficulty levels:
+
+- **Deep Breathing** — guided inhale/hold/exhale breathing
+- **Diaphragmatic Breathing** — step-based breathing guidance
+- **Slow Reading** — paced reading with sentence highlighting
+- **Syllable Practice** — repeated syllable practice with a visual rhythm
+- **Word Repetition** — personalized word repetition based on previous analysis
+- **Mirror Practice** — live camera-based speaking practice
+- **Loud Reading** — stories, quotes, articles, and tongue twisters
+- **Relaxation** — guided jaw, tongue, lip, and neck exercises
+
+---
+
+## 🤖 AI Speech Analysis
+
+For supported exercises, users can optionally enable voice analysis.
+
+The backend processes recorded speech using a multi-task Wav2Vec2 model and provides:
+
+- Fluency classification
+- Disfluency type probabilities
+- Severity estimation
+- Overall fluency ratio
+- Dominant disfluency pattern
+- Speech transcript
+- Potential practice words
+- Personalized speech exercises
+
+The current model uses:
+
+- **Wav2Vec2** for speech representation and disfluency analysis
+- **faster-whisper** for transcription and word timestamps
+- **FastAPI** for serving the analysis pipeline
+
+The analysis service is intentionally separated from the frontend so that the ML backend can be developed and deployed independently.
+
+---
+
+## 🧠 Personalized Practice
+
+One of the main features of Fluent Speechify is that practice can adapt based on previous speech analysis.
+
+The system can use previously detected practice words to generate:
+
+### Personalized Loud Reading
+
+Instead of always presenting the same passage, the system can generate a passage containing relevant target words.
+
+### Personalized Word Repetition
+
+Words identified during previous speech analysis can become the next Word Repetition targets.
+
+### Personalized Syllable Practice
+
+The backend generates syllable practice items from personalized target words.
+
+The frontend receives these as structured `syllableItems`, so syllable generation is handled by the backend rather than being guessed by the browser.
+
+When an OpenAI API key is not configured, the backend uses a local deterministic fallback so the personalization pipeline remains functional during development.
+
+---
+
+## 🏗️ Architecture
+
+```text
+┌─────────────────────────────────────────────┐
+│              Next.js Frontend               │
+│                                             │
+│  Exercises · Dashboard · Progress · Auth   │
+│  Recording · Personalized Practice UI       │
+└──────────────────────┬──────────────────────┘
+                       │
+                       │ HTTP / multipart audio
+                       ▼
+┌─────────────────────────────────────────────┐
+│              FastAPI Backend                │
+│                                             │
+│  /health                                    │
+│  /v1/analyze                                │
+│                                             │
+│  Audio decoding                             │
+│  Whisper transcription                      │
+│  Wav2Vec2 analysis                          │
+│  Target-word extraction                     │
+│  Personalization                            │
+└──────────────────────┬──────────────────────┘
+                       │
+             ┌─────────┴─────────┐
+             ▼                   ▼
+      Speech Analysis      Personalization
+       Wav2Vec2 +           OpenAI / local
+       Whisper              fallback
+```
+
+---
+
+## 📁 Project Structure
+
+```text
+fluent-speechify/
+│
+├── src/
+│   ├── app/                 # Next.js routes
+│   ├── components/          # Shared UI components
+│   ├── features/
+│   │   ├── exercises/       # Exercise players and runner
+│   │   ├── session/         # Analysis and session UI
+│   │   ├── dashboard/
+│   │   ├── progress/
+│   │   ├── gamification/
+│   │   └── profile/
+│   ├── data/                # Exercise catalogue and content
+│   ├── hooks/               # Client-side hooks
+│   ├── lib/
+│   │   ├── services/        # Application services
+│   │   ├── repositories/    # Data access
+│   │   └── db/              # Local storage adapter
+│   ├── types/               # Shared TypeScript types
+│   └── utils/
+│
+├── backend/
+│   ├── app/
+│   │   ├── main.py          # FastAPI application
+│   │   ├── inference.py     # Audio analysis pipeline
+│   │   ├── personalization.py
+│   │   ├── schemas.py
+│   │   └── ...
+│   ├── ml/
+│   │   ├── model.py
+│   │   ├── train.py
+│   │   ├── evaluate.py
+│   │   └── ...
+│   ├── tests/
+│   ├── requirements.txt
+│   └── README.md
+│
+├── package.json
+└── README.md
+```
+
+---
+
+## 🚀 Running the Project Locally
+
+Fluent Speechify consists of two services.
+
+### 1. Frontend
+
+From the project root:
 
 ```bash
 npm install
-npm run dev     # http://localhost:3000
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:3000
+```
+
+Production build:
+
+```bash
+npm run build
+```
+
+---
+
+### 2. Backend
+
+Open a second terminal:
+
+```bash
+cd backend
+```
+
+Create/activate the Python virtual environment.
+
+#### Windows PowerShell
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Start FastAPI:
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+Backend:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+---
+
+## 🔑 Environment Variables
+
+### Frontend
+
+Create `.env.local` in the project root if the backend is not running on the default URL:
+
+```env
+NEXT_PUBLIC_ANALYSIS_API_URL=http://localhost:8000
+```
+
+The application defaults to:
+
+```text
+http://localhost:8000
+```
+
+so local development normally requires no frontend environment variable.
+
+### Backend
+
+Optional environment variables include:
+
+```env
+FLUENT_MODEL_CHECKPOINT_PATH=ml/checkpoints/best.pt
+FLUENT_CORS_ALLOW_ORIGINS=["http://localhost:3000"]
+
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=your_model_here
+```
+
+The OpenAI key is used only by the backend and must never be exposed in the browser.
+
+If an OpenAI key is unavailable, personalization falls back to the local implementation.
+
+---
+
+## 🔬 Speech Analysis Pipeline
+
+A recorded exercise follows approximately this pipeline:
+
+```text
+Browser recording
+       ↓
+Audio upload
+       ↓
+FastAPI
+       ↓
+Audio decoding / preprocessing
+       ↓
+Wav2Vec2 analysis
+       ↓
+Clip-level fluency + disfluency predictions
+       ↓
+Whisper transcription
+       ↓
+Word timestamps
+       ↓
+Potential practice-word extraction
+       ↓
+Personalization
+       ↓
+Personalized exercise
+```
+
+The Wav2Vec2 model currently operates primarily on audio clips/windows. Therefore, practice-word locations are heuristic associations between speech windows and transcript timestamps rather than exact ground-truth stutter locations.
+
+---
+
+## 📊 Current Project Status
+
+| Feature | Status |
+|---|---|
+| Local account / login flow | ✅ |
+| Onboarding | ✅ |
+| Initial assessment | ✅ |
+| Personalized daily plan | ✅ |
+| Interactive exercise system | ✅ |
+| Multiple difficulty levels | ✅ |
+| Session tracking | ✅ |
+| Progress dashboard | ✅ |
+| XP / levels / achievements | ✅ |
+| Optional microphone recording | ✅ |
+| FastAPI speech-analysis service | ✅ |
+| Wav2Vec2 speech model | ✅ |
+| Whisper transcription | ✅ |
+| Target-word extraction | ✅ |
+| Personalized Loud Reading | ✅ |
+| Personalized Word Repetition | ✅ |
+| Personalized Syllable Practice | ✅ |
+| OpenAI-powered personalization | 🟡 Optional |
+| Production authentication | ⏳ |
+| Cloud persistence | ⏳ |
+| Real-time streaming analysis | ⏳ |
+| Clinical validation | ⏳ |
+
+---
+
+## ⚠️ Limitations
+
+### Not a clinical diagnostic system
+
+The analysis scores are automated estimates intended for practice feedback and progress tracking. They are not equivalent to a clinician-administered stuttering assessment.
+
+### Target words are approximate
+
+Potential practice words are inferred from overlapping speech-analysis windows and transcription timestamps. They should not be interpreted as confirmed locations of stuttering.
+
+### Dataset limitations
+
+The speech model is based on the SEP-28k dataset. Dataset characteristics may not fully represent the diversity of real users, accents, microphones, environments, ages, or speaking styles.
+
+### CPU inference
+
+Wav2Vec2 inference can be relatively slow on CPU, especially for longer recordings. Production deployment may benefit from GPU inference or model optimization.
+
+### No production auth for the analysis API
+
+The analysis endpoint should not be exposed publicly without appropriate authentication, rate limiting, session scoping, and privacy controls.
+
+---
+
+## 🧪 Development
+
+Frontend checks:
+
+```bash
 npm run build
 npm run lint
-npm test        # vitest, run once
-npm run test:watch     # vitest, watch mode
-npm run test:coverage  # vitest with coverage report
+npm test
 ```
 
-## Local auth
+Backend:
 
-There's a real login/signup screen (`/login`), but "real" is device-local:
-one account lives in `localStorage`, the password is hashed with the
-browser's Web Crypto API (SHA-256 + a per-account salt) before it's stored,
-and nothing is sent to a server — because there is no server yet. See
-`src/lib/services/auth.service.ts`. Swapping this for real backend auth
-(Supabase, NextAuth, etc.) only touches that one file and the repository it
-calls; nothing above the service layer needs to change.
-
-## Testing
-
-Unit and integration tests run on [Vitest](https://vitest.dev) with jsdom and
-Testing Library, covering the layers that matter most for correctness:
-
-- `src/utils/__tests__/date.ts` — date-key math, week/day ranges, formatting
-- `src/lib/__tests__/gamification.service.test.ts` — XP scaling, leveling, streak
-  advance/reset logic
-- `src/lib/__tests__/storage.test.ts` — the `localStorage` adapter, including a
-  test that data survives a simulated page reload
-- `src/lib/__tests__/session-progress-integration.test.ts` — end-to-end:
-  completing an exercise correctly updates XP, streak, progress stats and
-  today's plan, all through the same repository layer the UI uses
-
-## Loading & error states
-
-- `AppShell` shows a spinner while device storage loads, and a retry screen
-  (rather than an infinite spinner) if reading it fails.
-- `src/app/error.tsx` and `global-error.tsx` catch unexpected render errors
-  per-route and at the root, each with a "try again" action.
-- `src/app/not-found.tsx` handles unknown routes.
-- `src/app/(app)/loading.tsx` covers route-transition loading.
-- Dashboard and Progress show skeleton placeholders (not a blank screen)
-  while their data loads.
-
-## What is built
-
-| Roadmap item | Status |
-| --- | --- |
-| Local sign up / log in (device-only account, hashed password) | ✅ |
-| Onboarding: profile (name, age, gender, languages, country) | ✅ |
-| Initial assessment: difficulties, severity, situations, goals | ✅ |
-| Personalised daily plan generated from the assessment | ✅ |
-| Dashboard: streak, today's exercises, minutes, weekly progress, continue session, goal | ✅ |
-| 8 interactive exercises with 3 difficulty levels each | ✅ |
-| Session summary: duration, exercises completed, streak, XP | ✅ |
-| Progress: daily calendar, weekly chart, monthly chart, longest streak, total time | ✅ |
-| Gamification: XP, levels, badges, achievements, streak rewards | ✅ |
-| Backend-verified auth (real server, password reset, Google) | ⛔️ deferred — see *Adding the backend* |
-| Supabase persistence | ⛔️ deferred |
-| Stammering analysis (FastAPI + ML model, opt-in mic recording in reading/repetition exercises) | 🟡 built, model untrained — see `backend/README.md` |
-| Phase 2+ (therapy programs, journal, therapist portal, AI) | ⛔️ not started |
-
-### Exercises
-
-Each one is a real interactive player, not a static description:
-
-1. **Deep Breathing** — animated circle driven by an inhale/hold/exhale pattern that changes per difficulty
-2. **Diaphragmatic Breathing** — guided steps with a per-step countdown
-3. **Slow Reading** — sentence highlighting at an adjustable words-per-minute pace
-4. **Syllable Practice** — Pa/Ta/Ka/Ma/Sa… with a repetition beat indicator
-5. **Word Repetition** — multi-syllable words on the same rhythm engine
-6. **Mirror Practice** — front camera as a mirror, live only, never recorded
-7. **Loud Reading** — stories, quotes, articles and tongue twisters
-8. **Relaxation** — jaw, tongue, lip and neck sequences
-
-Three Phase 2 exercises (vowel practice, tongue twisters, conversation practice)
-appear in the library as locked previews so the catalogue shape is already right.
-
-## Architecture
-
-The roadmap's key constraint is that the backend must be swappable later
-without touching the frontend. That is enforced by a strict layering:
-
-```
-UI (app/, features/, components/)
-        │           ← never imports storage or a client directly
-        ▼
-Service layer (lib/services/)          business rules: XP, streaks, plan generation
-        │
-        ▼
-Repository layer (lib/repositories/)   the only place that knows how rows are read
-        │
-        ▼
-Storage adapter (lib/db/storage.ts)    localStorage today, Supabase/REST tomorrow
+```bash
+cd backend
+pytest
 ```
 
-Every repository method is `async` and returns domain types, so replacing the
-adapter with a network client is a drop-in change.
+The frontend and backend are intentionally separated so either side can evolve independently.
 
-```
-src/
-  app/
-    (app)/              routes behind the app shell
-      dashboard/  exercises/  exercises/[slug]/
-      progress/  achievements/  profile/  session/summary/
-    onboarding/
-  components/
-    layout/             app shell, page header
-    ui/                 shadcn/ui + local primitives (choice, button-link)
-  features/
-    onboarding/ dashboard/ exercises/ session/ progress/ gamification/ profile/
-  data/                 exercise catalogue, passages, achievement definitions
-  lib/
-    db/                 storage adapter + key map
-    repositories/       profile, session, plan, gamification
-    services/           profile, plan, session, progress, gamification
-    validations/        input validation
-  hooks/                use-app-data (client bootstrap), use-exercise-timer
-  types/                shared domain types
-  utils/                date/duration helpers
-```
+---
 
-### Notable decisions
+## 🛠️ Tech Stack
 
-- **Wall-clock timer.** `useExerciseTimer` derives elapsed time from
-  `Date.now()`, not from counted ticks, so a backgrounded tab (where intervals
-  are throttled) still reports the real practice duration.
-- **Sessions under 10 seconds are not logged.** Accidental starts should not
-  pollute streaks and stats.
-- **90% completion marks an exercise done.** Below that the session still earns
-  proportional XP but does not tick the daily plan or advance the streak.
-- **Plans are deterministic per day.** Exercise scoring is seeded by the date, so
-  the plan varies day to day but never reshuffles mid-session.
-- **Streaks self-heal.** A streak is only alive if the last practice was today or
-  yesterday; a stale one is reset to zero on read.
-- **The camera is never recorded.** The mirror exercise attaches the stream to a
-  local `<video>` and stops every track on unmount.
+### Frontend
 
-## Adding the backend
+- Next.js 16
+- React
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Motion
+- Recharts
 
-Nothing above the repository layer needs to change.
+### Backend
 
-1. Add the Supabase client and swap `getStorage()` in `lib/db/storage.ts` for a
-   Supabase-backed adapter, or replace each repository body with table queries.
-2. The type names in `types/index.ts` already mirror the roadmap's table names
-   (`profiles`, `assessments`, `exercises`, `exercise_sessions`, `daily_plans`,
-   `streaks`, `achievements`).
-3. Replace the hardcoded `profileId: "local"` in the services with the real
-   authenticated user id.
-4. Wrap the app in auth and drop the onboarding redirect in
-   `components/layout/app-shell.tsx` behind a session check.
+- Python
+- FastAPI
+- Pydantic
+- PyTorch
+- Hugging Face Transformers
+- Wav2Vec2
+- faster-whisper
+- librosa / audio processing tools
 
-## Stack
+### AI / ML
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui (Base UI) ·
-Motion · Recharts
+- Wav2Vec2
+- Whisper
+- SEP-28k
+- Optional OpenAI integration
+- Local personalization fallback
+
+---
+
+## 🎓 Project Context
+
+Fluent Speechify is being developed as a final-year engineering project exploring how speech analytics, machine learning, and personalized digital exercises can support structured speaking practice.
+
+The goal is not to replace professional speech therapy, but to provide a consistent practice environment with measurable and adaptive feedback.
+
+---
+
+## 📌 Future Work
+
+- Real-time speech analysis
+- Improved word-level disfluency alignment
+- More robust personalization
+- Clinical/user validation
+- Better multilingual support
+- Production authentication
+- Cloud persistence
+- Therapist-facing dashboard
+- Personalized therapy programs
+- Model optimization for low-latency inference

@@ -167,6 +167,19 @@ export interface SpeechAnalysisClip {
 }
 
 /** Result of sending a session's recording to the analysis backend. */
+export interface TargetWord {
+  word: string;
+  score: number;
+  evidenceCount: number;
+}
+
+export interface PersonalizedExercise {
+  title: string;
+  text: string;
+  targetWords: string[];
+  syllableItems: string[];
+}
+
 export interface SpeechAnalysis {
   durationSeconds: number;
   clips: SpeechAnalysisClip[];
@@ -174,6 +187,11 @@ export interface SpeechAnalysis {
   overallSeverityScore: number;
   overallSeverityBucket: Severity;
   dominantDisfluencyType: DisfluencyType | null;
+
+  transcript: string | null;
+  targetWords: TargetWord[];
+  personalizedExercise: PersonalizedExercise | null;
+
   modelVersion: string;
   warnings: string[];
 }
@@ -223,6 +241,26 @@ export interface Achievement {
   icon: string;
   /** Null while locked. */
   unlockedAt: string | null;
+}
+
+export interface DifficultWord {
+  word: string;
+  timesDetected: number;
+  averageScore: number;
+  lastDetectedAt: string;
+  trend: "improving" | "stable" | "worsening";
+}
+
+export interface SeverityHistoryPoint {
+  score: number;
+  recordedAt: string;
+}
+
+export interface SpeechPersonalizationProfile {
+  userId: string;
+  difficultWords: DifficultWord[];
+  severityHistory: SeverityHistoryPoint[];
+  dominantPatterns: string[];
 }
 
 export interface LevelInfo {

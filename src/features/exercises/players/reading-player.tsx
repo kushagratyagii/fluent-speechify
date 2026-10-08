@@ -12,8 +12,10 @@ function countWords(sentence: string): number {
   return sentence.trim().split(/\s+/).filter(Boolean).length;
 }
 
-export function ReadingPlayer({ exercise, config, timer }: PlayerProps) {
-  const passages = exercise.content?.passages ?? [];
+export function ReadingPlayer({exercise,config,timer,personalizedPassage,}: PlayerProps) {
+  const passages = personalizedPassage
+  ? [personalizedPassage, ...(exercise.content?.passages ?? [])]
+  : (exercise.content?.passages ?? []);
   const [passageId, setPassageId] = useState(passages[0]?.id ?? "");
   const [speed, setSpeed] = useState(1);
 

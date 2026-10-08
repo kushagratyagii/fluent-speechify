@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+
 import {
   ArrowLeft,
   Check,
@@ -13,34 +14,58 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
+
 import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { cn } from "@/lib/utils";
+
 import { useAppData } from "@/hooks/use-app-data";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { useExerciseTimer } from "@/hooks/use-exercise-timer";
-import { analysisService } from "@/lib/services/analysis.service";
+
+import {
+  analysisService,
+  type PersonalizationHistoryItem,
+} from "@/lib/services/analysis.service";
+
 import { sessionService } from "@/lib/services/session.service";
 import { getCategory } from "@/data/exercises";
-import type { Difficulty, Exercise, SpeechAnalysis } from "@/types";
+
+import type {
+  Difficulty,
+  Exercise,
+  ReadingPassage,
+  SpeechAnalysis,
+} from "@/types";
+
 import { formatClock } from "@/utils/date";
+
 import { AnalysisCard } from "@/features/session/analysis-card";
+
 import { MicToggle } from "./mic-toggle";
+
 import { BreathingPlayer } from "./players/breathing-player";
 import { GuidedPlayer } from "./players/guided-player";
 import { MirrorPlayer } from "./players/mirror-player";
 import { ReadingPlayer } from "./players/reading-player";
 import { RepetitionPlayer } from "./players/repetition-player";
+
 import type { PlayerProps } from "./players/types";
+
 import { lastSummary } from "./session-store";
 
-/** Only exercises with actual speech content are worth analyzing -- the
- * mirror player stays camera-only by design, and breathing/guided/relaxation
- * players have no target speech to score. */
-const RECORDABLE_PLAYERS: Exercise["player"][] = ["reading", "repetition"];
+/** Only exercises with actual speech content are worth analyzing. */
+const RECORDABLE_PLAYERS: Exercise["player"][] = [
+  "reading",
+  "repetition",
+];
 
-const PLAYERS: Record<Exercise["player"], (props: PlayerProps) => React.ReactNode> = {
+const PLAYERS: Record<
+  Exercise["player"],
+  (props: PlayerProps) => React.ReactNode
+> = {
   breathing: BreathingPlayer,
   guided: GuidedPlayer,
   reading: ReadingPlayer,
@@ -48,7 +73,12 @@ const PLAYERS: Record<Exercise["player"], (props: PlayerProps) => React.ReactNod
   mirror: MirrorPlayer,
 };
 
-const DIFFICULTY_ORDER: Difficulty[] = ["beginner", "intermediate", "advanced"];
+const DIFFICULTY_ORDER: Difficulty[] = [
+  "beginner",
+  "intermediate",
+  "advanced",
+];
+
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
@@ -65,37 +95,116 @@ export function ExerciseRunner({
   const router = useRouter();
   const { refresh } = useAppData();
 
-  const [difficulty, setDifficulty] = useState<Difficulty>(initialDifficulty);
+  const [difficulty, setDifficulty] =
+    useState<Difficulty>(initialDifficulty);
+
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+
   const [resultForReview, setResultForReview] = useState<
     Awaited<ReturnType<typeof sessionService.complete>> | null
   >(null);
+
   const startedAtRef = useRef<string | null>(null);
   const savedRef = useRef(false);
 
   const config = exercise.difficulties[difficulty];
   const category = getCategory(exercise.categoryId);
   const Player = PLAYERS[exercise.player];
+
   const recordable = RECORDABLE_PLAYERS.includes(exercise.player);
 
-  const timer = useExerciseTimer({ totalSeconds: config.durationSeconds });
-  const recorder = useAudioRecorder();
-  const [recordingEnabled, setRecordingEnabled] = useState(false);
-  const [analysisAvailable, setAnalysisAvailable] = useState(false);
-  const [checkingAvailability, setCheckingAvailability] = useState(recordable);
+  const timer = useExerciseTimer({
+    totalSeconds: config.durationSeconds,
+  });
 
-  // One-off readiness check so the toggle doesn't promise analysis the
-  // backend can't currently deliver (not deployed, or checkpoint not loaded).
+  const recorder = useAudioRecorder();
+
+  const [recordingEnabled, setRecordingEnabled] =
+    useState(false);
+
+  const [analysisAvailable, setAnalysisAvailable] =
+    useState(false);
+
+  const [personalizedPassage, setPersonalizedPassage] =
+    useState<ReadingPassage | null>(null);
+
+  const [personalizedItems, setPersonalizedItems] =
+    useState<string[]>([]);
+
+  const [checkingAvailability, setCheckingAvailability] =
+    useState(recordable);
+
+  /**
+   * Load the latest personalized passage for this exercise.
+   *
+   * The generated passage is stored inside the previous session's
+   * analysis, so no separate database table is required.
+   */
+  useEffect(() => {
+    if (exercise.player !== "reading") return;
+
+    let cancelled = false;
+
+    sessionService.listAll().then((sessions) => {
+      if (cancelled) return;
+
+      const previousSession = [...sessions]
+        .reverse()
+        .find(
+          (session) =>
+            session.exerciseId === exercise.id &&
+            session.analysis?.personalizedExercise?.text,
+        );
+
+      const generated =
+        previousSession?.analysis?.personalizedExercise;
+
+      if (!generated) {
+        setPersonalizedPassage(null);
+        return;
+      }
+
+      const sentences = generated.text
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean);
+
+      if (sentences.length === 0) {
+        setPersonalizedPassage(null);
+        return;
+      }
+
+      setPersonalizedPassage({
+        id: `personalized-${previousSession?.id ?? Date.now()}`,
+        title: generated.title,
+        kind: "paragraph",
+        difficulty,
+        sentences,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exercise.id, exercise.player, difficulty]);
+
+  /**
+   * One-off readiness check so the toggle doesn't promise analysis the
+   * backend can't currently deliver.
+   */
   useEffect(() => {
     if (!recordable) return;
+
     let cancelled = false;
+
     analysisService.checkHealth().then((ok) => {
       if (!cancelled) {
         setAnalysisAvailable(ok);
         setCheckingAvailability(false);
       }
     });
+
     return () => {
       cancelled = true;
     };
@@ -104,11 +213,13 @@ export function ExerciseRunner({
   const save = useCallback(
     async (elapsedSeconds: number) => {
       if (savedRef.current) return;
+
       savedRef.current = true;
       setSaving(true);
 
       let analysis: SpeechAnalysis | undefined;
-      if (recordingEnabled && recorder.state !== "idle") {
+
+      if (recordingEnabled) {
         setAnalyzing(true);
        try {
   const blob = await recorder.stop();
@@ -140,14 +251,19 @@ export function ExerciseRunner({
           difficulty,
           elapsedSeconds,
           targetSeconds: config.durationSeconds,
-          startedAt: startedAtRef.current ?? new Date().toISOString(),
+          startedAt:
+            startedAtRef.current ??
+            new Date().toISOString(),
           analysis,
         });
 
         await refresh();
 
         if (!summary) {
-          toast.info("That was too short to log. Give it at least 10 seconds.");
+          toast.info(
+            "That was too short to log. Give it at least 10 seconds.",
+          );
+
           router.push("/dashboard");
           return;
         }
@@ -155,38 +271,138 @@ export function ExerciseRunner({
         lastSummary.set(summary);
         setSaving(false);
 
-        // With an analysis result, pause here to show it before handing off
-        // to the summary screen. Without one, keep the original flow exactly.
+        /**
+         * With an analysis result, pause here to show it before
+         * handing off to the summary screen.
+         */
         if (summary.analysis) {
           setResultForReview(summary);
           return;
         }
+
         router.push("/session/summary");
       } catch {
         savedRef.current = false;
         setSaving(false);
+
         toast.error("Could not save this session.");
       }
     },
-    [exercise.id, difficulty, config.durationSeconds, refresh, router, recordingEnabled, recorder],
+    [
+      exercise.id,
+      difficulty,
+      config.durationSeconds,
+      refresh,
+      router,
+      recordingEnabled,
+      recorder,
+    ],
   );
+
+  /**
+   * Load personalized items from the latest speech analysis
+   * for repetition-based exercises.
+   *
+   * Word Repetition:
+   *   Uses personalized target words.
+   *
+   * Syllable Practice:
+   *   Uses syllable_items generated by the backend.
+   */
+  useEffect(() => {
+    if (exercise.player !== "repetition") return;
+
+    let cancelled = false;
+
+    sessionService.listAll().then((sessions) => {
+      if (cancelled) return;
+
+      const previousSession = [...sessions]
+        .reverse()
+        .find(
+          (session) =>
+            session.analysis?.personalizedExercise?.syllableItems
+              ?.length ||
+            session.analysis?.personalizedExercise?.targetWords
+              ?.length ||
+            session.analysis?.targetWords?.length,
+        );
+
+      const personalizedExercise =
+        previousSession?.analysis?.personalizedExercise;
+
+      const isSyllablePractice = exercise.title
+        .toLowerCase()
+        .includes("syllable");
+
+      if (isSyllablePractice) {
+        const syllableItems =
+          personalizedExercise?.syllableItems ?? [];
+
+        const uniqueSyllableItems = Array.from(
+          new Set(
+            syllableItems
+              .map((item) => item.trim())
+              .filter(Boolean),
+          ),
+        );
+
+        setPersonalizedItems(
+          uniqueSyllableItems.slice(0, 10),
+        );
+
+        return;
+      }
+
+      const targetWords =
+        personalizedExercise?.targetWords ??
+        previousSession?.analysis?.targetWords?.map(
+          (word) => word.word,
+        ) ??
+        [];
+
+      const uniqueTargetWords = Array.from(
+        new Set(
+          targetWords
+            .map((word) => word.trim())
+            .filter(Boolean)
+            .map((word) => word.toLowerCase()),
+        ),
+      );
+
+      setPersonalizedItems(
+        uniqueTargetWords.slice(0, 5),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exercise.player, exercise.title]);
 
   // The timer reaching zero ends the session on its own.
   useEffect(() => {
-    if (timer.finished && !savedRef.current) void save(timer.elapsed);
+    if (timer.finished && !savedRef.current) {
+      void save(timer.elapsed);
+    }
   }, [timer.finished, timer.elapsed, save]);
 
-  function handleStart() {
-    if (!startedAtRef.current) startedAtRef.current = new Date().toISOString();
+  async function handleStart() {
+    if (!startedAtRef.current) {
+      startedAtRef.current =
+        new Date().toISOString();
+    }
+
     if (recordingEnabled) {
       if (recorder.state === "idle") {
-        void recorder.start();
+        await recorder.start();
       } else if (timer.running) {
         recorder.pause();
       } else if (recorder.state === "paused") {
         recorder.resume();
       }
     }
+
     timer.toggle();
   }
 
@@ -197,7 +413,11 @@ export function ExerciseRunner({
 
   function handleRestart() {
     timer.reset();
-    if (recordingEnabled && recorder.state !== "idle") {
+
+    if (
+      recordingEnabled &&
+      recorder.state !== "idle"
+    ) {
       void recorder.stop().then(() => recorder.reset());
     }
   }
@@ -211,13 +431,23 @@ export function ExerciseRunner({
           <span className="grid size-14 place-items-center rounded-full bg-primary/15 text-primary">
             <Check className="size-7" />
           </span>
+
           <h1 className="text-xl font-semibold tracking-tight">
             Here&apos;s how that sounded
           </h1>
         </div>
-        <AnalysisCard analysis={resultForReview.analysis} />
+
+        <AnalysisCard
+          analysis={resultForReview.analysis}
+        />
+
         <div className="flex justify-center">
-          <Button size="lg" onClick={() => router.push("/session/summary")}>
+          <Button
+            size="lg"
+            onClick={() =>
+              router.push("/session/summary")
+            }
+          >
             Continue
           </Button>
         </div>
@@ -228,7 +458,11 @@ export function ExerciseRunner({
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
       <div className="mb-6 flex items-center justify-between gap-3">
-        <ButtonLink variant="ghost" size="sm" href="/exercises">
+        <ButtonLink
+          variant="ghost"
+          size="sm"
+          href="/exercises"
+        >
           <ArrowLeft className="size-4" />
           Exercises
         </ButtonLink>
@@ -252,10 +486,14 @@ export function ExerciseRunner({
             {category.name}
           </p>
         ) : null}
+
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           {exercise.title}
         </h1>
-        <p className="text-sm text-muted-foreground">{exercise.summary}</p>
+
+        <p className="text-sm text-muted-foreground">
+          {exercise.summary}
+        </p>
       </header>
 
       {/* Difficulty can only change before the first tick. */}
@@ -274,7 +512,11 @@ export function ExerciseRunner({
             )}
           >
             {DIFFICULTY_LABEL[level]} ·{" "}
-            {Math.round(exercise.difficulties[level].durationSeconds / 60)}m
+            {Math.round(
+              exercise.difficulties[level]
+                .durationSeconds / 60,
+            )}
+            m
           </button>
         ))}
       </div>
@@ -282,7 +524,10 @@ export function ExerciseRunner({
       {!started ? (
         <ul className="mb-6 space-y-2 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
           {exercise.instructions.map((line) => (
-            <li key={line} className="flex gap-2">
+            <li
+              key={line}
+              className="flex gap-2"
+            >
               <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
               {line}
             </li>
@@ -302,19 +547,35 @@ export function ExerciseRunner({
         </div>
       ) : null}
 
-      {recordingEnabled && started && (recorder.state === "recording" || recorder.state === "paused") ? (
+      {recordingEnabled &&
+      started &&
+      (recorder.state === "recording" ||
+        recorder.state === "paused") ? (
         <div className="mb-4 flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
           <Circle
             className={cn(
               "size-2.5 fill-current",
-              recorder.state === "recording" ? "text-rose-500 animate-pulse" : "text-muted-foreground",
+              recorder.state === "recording"
+                ? "animate-pulse text-rose-500"
+                : "text-muted-foreground",
             )}
           />
-          {recorder.state === "recording" ? "Recording" : "Recording paused"}
+
+          {recorder.state === "recording"
+            ? "Recording"
+            : "Recording paused"}
         </div>
       ) : null}
 
-      <Player exercise={exercise} config={config} timer={timer} />
+      <Player
+        exercise={exercise}
+        config={config}
+        timer={timer}
+        personalizedPassage={
+          personalizedPassage ?? undefined
+        }
+        personalizedItems={personalizedItems}
+      />
 
       {/* Timer and transport controls */}
       <div className="mt-8 space-y-4">
@@ -323,15 +584,22 @@ export function ExerciseRunner({
             <span className="font-medium tabular-nums">
               {formatClock(timer.elapsed)}
             </span>
+
             <span className="tabular-nums text-muted-foreground">
               {formatClock(config.durationSeconds)}
             </span>
           </div>
+
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <motion.div
               className="h-full rounded-full bg-primary"
-              animate={{ width: `${timer.progress * 100}%` }}
-              transition={{ duration: 0.15, ease: "linear" }}
+              animate={{
+                width: `${timer.progress * 100}%`,
+              }}
+              transition={{
+                duration: 0.15,
+                ease: "linear",
+              }}
             />
           </div>
         </div>
@@ -353,7 +621,11 @@ export function ExerciseRunner({
             size="lg"
             className="min-w-40"
             onClick={handleStart}
-            disabled={saving || analyzing || timer.finished}
+            disabled={
+              saving ||
+              analyzing ||
+              timer.finished
+            }
           >
             {saving || analyzing ? (
               <Loader2 className="size-4 animate-spin" />
@@ -362,6 +634,7 @@ export function ExerciseRunner({
             ) : (
               <Play className="size-4" />
             )}
+
             {analyzing
               ? "Analyzing your voice…"
               : saving
@@ -387,8 +660,8 @@ export function ExerciseRunner({
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          Finish at least 90% of the time to mark this exercise complete for
-          today.
+          Finish at least 90% of the time to mark this
+          exercise complete for today.
         </p>
       </div>
     </div>
