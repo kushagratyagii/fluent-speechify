@@ -43,7 +43,7 @@ def decode_to_wav(raw_bytes: bytes, suffix: str = ".webm") -> Path:
         src.write(raw_bytes)
         src_path = Path(src.name)
 
-    dst_path = src_path.with_suffix(".wav")
+    dst_path = src_path.with_name(src_path.stem + "_converted.wav")
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-i", str(src_path), "-ac", "1", "-ar", str(SAMPLE_RATE), str(dst_path)],

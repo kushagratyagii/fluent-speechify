@@ -58,3 +58,14 @@ next-env.d.ts
 // env related 
 .env.local
 .env*.local
+
+# Local evaluation data (do not push)
+backend/ml/clips/
+backend/ml/hvsa_manifest.csv
+backend/ml/hvsa_metrics.json
+backend/ml/extract_hvsa.py
+
+# Local test media and notebooks
+*.mp4
+stutter_test.wav
+Untitled2.ipynb

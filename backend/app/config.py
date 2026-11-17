@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
     personalization_max_seconds: int = 180
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
 
     class Config:
         env_prefix = "FLUENT_"

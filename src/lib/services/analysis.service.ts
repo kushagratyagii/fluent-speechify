@@ -21,7 +21,7 @@ const API_BASE_URL =
 const ANALYZE_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 3_000;
 
-export class AnalysisUnavailableError extends Error {}
+export class AnalysisUnavailableError extends Error { }
 
 interface RawClipPrediction {
   start_seconds: number;
@@ -92,16 +92,23 @@ function toAnalysis(raw: RawAnalyzeResponse): SpeechAnalysis {
 
     personalizedExercise: raw.personalized_exercise
       ? {
-          title: raw.personalized_exercise.title,
-          text: raw.personalized_exercise.text,
-          targetWords: raw.personalized_exercise.target_words,
-          syllableItems: raw.personalized_exercise.syllable_items,
-        }
+        title: raw.personalized_exercise.title,
+        text: raw.personalized_exercise.text,
+        targetWords: raw.personalized_exercise.target_words,
+        syllableItems: raw.personalized_exercise.syllable_items,
+      }
       : null,
 
     modelVersion: raw.model_version,
     warnings: raw.warnings,
   };
+}
+
+
+export interface GeneratedPassage {
+  title: string;
+  sentences: string[];
+  vocabulary: string[];
 }
 
 export interface PersonalizationHistoryItem {
@@ -199,7 +206,7 @@ export const analysisService = {
 
         throw new AnalysisUnavailableError(
           detail?.detail ??
-            `Analysis failed with status ${res.status}`,
+          `Analysis failed with status ${res.status}`,
         );
       }
 
@@ -215,6 +222,53 @@ export const analysisService = {
         err instanceof Error
           ? err.message
           : "Analysis request failed",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+
+  /** Generate the daily passage, personalized using previous speech sessions. */
+  async generatePassage(input: {
+    difficulty: "beginner" | "intermediate" | "advanced";
+    targetWords?: string[];
+  }): Promise<GeneratedPassage> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/generate-passage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "daily",
+          difficulty: input.difficulty,
+          target_words: input.targetWords ?? [],
+        }),
+        signal: controller.signal,
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new AnalysisUnavailableError(
+          data?.detail ?? `Passage generation failed (${response.status})`,
+        );
+      }
+
+      if (!data?.title || !Array.isArray(data.sentences)) {
+        throw new AnalysisUnavailableError("The AI returned an invalid passage.");
+      }
+
+      return {
+        title: data.title,
+        sentences: data.sentences,
+        vocabulary: Array.isArray(data.vocabulary) ? data.vocabulary : [],
+      };
+    } catch (error) {
+      if (error instanceof AnalysisUnavailableError) throw error;
+      throw new AnalysisUnavailableError(
+        error instanceof Error ? error.message : "Passage generation failed",
       );
     } finally {
       clearTimeout(timeout);

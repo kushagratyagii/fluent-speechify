@@ -31,11 +31,13 @@ import {
 } from "@/lib/services/analysis.service";
 
 import { sessionService } from "@/lib/services/session.service";
+import { personalizationService } from "@/lib/services/personalization.service";
 import { getCategory } from "@/data/exercises";
 
 import type {
   Difficulty,
   Exercise,
+  ExerciseContent,
   ReadingPassage,
   SpeechAnalysis,
 } from "@/types";
@@ -85,6 +87,12 @@ const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   advanced: "Advanced",
 };
 
+type GeneratedPassageData = {
+  title: string;
+  sentences: string[];
+  vocabulary?: string[];
+};
+
 export function ExerciseRunner({
   exercise,
   initialDifficulty,
@@ -93,7 +101,7 @@ export function ExerciseRunner({
   initialDifficulty: Difficulty;
 }) {
   const router = useRouter();
-  const { refresh } = useAppData();
+  const { refresh, account } = useAppData();
 
   const [difficulty, setDifficulty] =
     useState<Difficulty>(initialDifficulty);
@@ -126,63 +134,96 @@ export function ExerciseRunner({
   const [analysisAvailable, setAnalysisAvailable] =
     useState(false);
 
+  const [dailyPassage, setDailyPassage] =
+    useState<ReadingPassage | null>(null);
+
   const [personalizedPassage, setPersonalizedPassage] =
     useState<ReadingPassage | null>(null);
 
   const [personalizedItems, setPersonalizedItems] =
     useState<string[]>([]);
 
+  const [personalizedContent, setPersonalizedContent] =
+    useState<ExerciseContent | null>(null);
+
   const [checkingAvailability, setCheckingAvailability] =
     useState(recordable);
 
   /**
-   * Load the latest personalized passage for this exercise.
-   *
-   * The generated passage is stored inside the previous session's
-   * analysis, so no separate database table is required.
+   * Load the latest personalized exercise from persistent account storage.
    */
   useEffect(() => {
-    if (exercise.player !== "reading") return;
-
     let cancelled = false;
 
-    sessionService.listAll().then((sessions) => {
-      if (cancelled) return;
+    setPersonalizedContent(null);
+    setPersonalizedItems([]);
+    setPersonalizedPassage(null);
 
-      const previousSession = [...sessions]
-        .reverse()
-        .find(
-          (session) =>
-            session.exerciseId === exercise.id &&
-            session.analysis?.personalizedExercise?.text,
-        );
+    personalizationService
+      .getProfile()
+      .then((profile) => {
+        if (cancelled) return;
 
-      const generated =
-        previousSession?.analysis?.personalizedExercise;
+        const generated = profile.personalizedExercise;
+        const content = generated?.personalizedContent?.[exercise.id];
 
-      if (!generated) {
-        setPersonalizedPassage(null);
-        return;
-      }
+        if (exercise.player !== "reading") {
+          setPersonalizedContent(content ?? null);
+        }
 
-      const sentences = generated.text
-        .split(/(?<=[.!?])\s+/)
-        .map((sentence) => sentence.trim())
-        .filter(Boolean);
+        if (exercise.player === "reading") {
+          const generatedPassage = content?.passages?.[0];
 
-      if (sentences.length === 0) {
-        setPersonalizedPassage(null);
-        return;
-      }
+          if (
+            generatedPassage &&
+            Array.isArray(generatedPassage.sentences) &&
+            generatedPassage.sentences.length > 0
+          ) {
+            setPersonalizedPassage({
+              ...generatedPassage,
+              difficulty,
+            });
+          } else if (generated?.text) {
+            const sentences = generated.text
+              .split(/(?<=[.!?])\s+/)
+              .map((sentence) => sentence.trim())
+              .filter(Boolean);
 
-      setPersonalizedPassage({
-        id: `personalized-${previousSession?.id ?? Date.now()}`,
-        title: generated.title,
-        kind: "paragraph",
-        difficulty,
-        sentences,
+            setPersonalizedPassage(
+              sentences.length
+                ? {
+                    id: "personalized-profile",
+                    title: generated.title || "Personalized Para",
+                    kind: "paragraph",
+                    difficulty,
+                    sentences,
+                  }
+                : null,
+            );
+          } else {
+            setPersonalizedPassage(null);
+          }
+        }
+
+        if (exercise.player === "repetition") {
+          const isSyllable = exercise.id === "ex-syllable-practice";
+          const items = isSyllable
+            ? generated?.syllableItems ?? []
+            : generated?.targetWords ?? [];
+
+          setPersonalizedItems(items.slice(0, isSyllable ? 10 : 5));
+        } else {
+          setPersonalizedItems([]);
+        }
+      })
+      .catch((error) => {
+        console.error("Could not load personalized profile:", error);
+        if (!cancelled) {
+          setPersonalizedContent(null);
+          setPersonalizedItems([]);
+          setPersonalizedPassage(null);
+        }
       });
-    });
 
     return () => {
       cancelled = true;
@@ -190,8 +231,130 @@ export function ExerciseRunner({
   }, [exercise.id, exercise.player, difficulty]);
 
   /**
-   * One-off readiness check so the toggle doesn't promise analysis the
-   * backend can't currently deliver.
+   * Generate one AI Daily Passage.
+   * Previous session target words are incorporated into it.
+   * Cached per account, local date and difficulty.
+   */
+  useEffect(() => {
+    if (exercise.player !== "reading" || !account?.id) {
+      setDailyPassage(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const now = new Date();
+
+    const dateKey = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    const accountKey = String(account.id);
+
+    const dailyCacheKey =
+      `fluent:${accountKey}:daily-passage:${dateKey}:${difficulty}`;
+
+    const toReadingPassage = (
+      data: GeneratedPassageData,
+    ): ReadingPassage => ({
+      id: `daily-${dateKey}-${difficulty}`,
+      title: data.title,
+      kind: "paragraph",
+      difficulty,
+      sentences: data.sentences,
+      vocabulary: data.vocabulary ?? [],
+    });
+
+    async function loadDailyPassage() {
+      try {
+        // Reuse today's passage if it already exists.
+        const cachedDaily = localStorage.getItem(dailyCacheKey);
+
+        if (cachedDaily) {
+          try {
+            const parsed = JSON.parse(
+              cachedDaily,
+            ) as GeneratedPassageData;
+
+            if (
+              parsed?.title &&
+              Array.isArray(parsed.sentences) &&
+              parsed.sentences.length > 0
+            ) {
+              if (!cancelled) {
+                setDailyPassage(toReadingPassage(parsed));
+              }
+              return;
+            }
+          } catch {
+            localStorage.removeItem(dailyCacheKey);
+          }
+        }
+
+        // Fetch previous speech sessions.
+        const sessions = await sessionService.listAll();
+
+        if (cancelled) return;
+
+        // Collect target words from previous analyses.
+        const collectedWords = [...sessions]
+          .reverse()
+          .flatMap((session) => {
+            const personalizedWords =
+              session.analysis?.personalizedExercise?.targetWords ?? [];
+
+            const detectedWords =
+              session.analysis?.targetWords?.map(
+                (item) => item.word,
+              ) ?? [];
+
+            return [...personalizedWords, ...detectedWords];
+          });
+
+        const targetWords = [
+          ...new Set(
+            collectedWords
+              .map((word) => word.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ].slice(0, 8);
+
+        if (cancelled) return;
+
+        // Generate the Daily Passage.
+        const generated = await analysisService.generatePassage({
+          difficulty,
+          targetWords,
+        });
+
+        if (cancelled) return;
+
+        localStorage.setItem(
+          dailyCacheKey,
+          JSON.stringify(generated),
+        );
+
+        setDailyPassage(toReadingPassage(generated));
+      } catch (error) {
+        console.error(
+          "Daily Passage generation failed:",
+          error,
+        );
+      }
+    }
+
+    void loadDailyPassage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.id, difficulty, exercise.player]);
+
+  /**
+   * One-off readiness check so the toggle doesn't promise
+   * analysis the backend can't currently deliver.
    */
   useEffect(() => {
     if (!recordable) return;
@@ -221,27 +384,55 @@ export function ExerciseRunner({
 
       if (recordingEnabled) {
         setAnalyzing(true);
-       try {
-  const blob = await recorder.stop();
 
-  if (!blob) {
-    throw new Error("No audio recording was created.");
-  }
+        try {
+          const blob = await recorder.stop();
 
-  console.log("Recording blob created:", blob.size, blob.type);
+          if (!blob) {
+            throw new Error("No audio recording was created.");
+          }
 
-  analysis = await analysisService.analyze(blob);
+          console.log(
+            "Recording blob created:",
+            blob.size,
+            blob.type,
+          );
 
-  console.log("ANALYSIS SUCCESS:", analysis);
-} catch (error) {
-  console.error("ANALYSIS ERROR:", error);
+          const previousProfile =
+            await personalizationService.getProfile();
 
-  toast.error(
-    error instanceof Error
-      ? error.message
-      : "Could not analyze your recording.",
-  );
-}
+          const previousExercise =
+            previousProfile.personalizedExercise;
+
+          const personalizationHistory: PersonalizationHistoryItem[] =
+            previousExercise
+              ? [
+                  {
+                    targetWords: previousExercise.targetWords ?? [],
+                    personalizedText: previousExercise.text ?? "",
+                    dominantDisfluencyType: null,
+                    severityScore: 0,
+                  },
+                ]
+              : [];
+
+          analysis = await analysisService.analyze(
+            blob,
+            undefined,
+            personalizationHistory,
+          );
+
+          console.log("ANALYSIS SUCCESS:", analysis);
+        } catch (error) {
+          console.error("ANALYSIS ERROR:", error);
+
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Could not analyze your recording.",
+          );
+        }
+
         setAnalyzing(false);
       }
 
@@ -271,10 +462,6 @@ export function ExerciseRunner({
         lastSummary.set(summary);
         setSaving(false);
 
-        /**
-         * With an analysis result, pause here to show it before
-         * handing off to the summary screen.
-         */
         if (summary.analysis) {
           setResultForReview(summary);
           return;
@@ -299,88 +486,7 @@ export function ExerciseRunner({
     ],
   );
 
-  /**
-   * Load personalized items from the latest speech analysis
-   * for repetition-based exercises.
-   *
-   * Word Repetition:
-   *   Uses personalized target words.
-   *
-   * Syllable Practice:
-   *   Uses syllable_items generated by the backend.
-   */
-  useEffect(() => {
-    if (exercise.player !== "repetition") return;
-
-    let cancelled = false;
-
-    sessionService.listAll().then((sessions) => {
-      if (cancelled) return;
-
-      const previousSession = [...sessions]
-        .reverse()
-        .find(
-          (session) =>
-            session.analysis?.personalizedExercise?.syllableItems
-              ?.length ||
-            session.analysis?.personalizedExercise?.targetWords
-              ?.length ||
-            session.analysis?.targetWords?.length,
-        );
-
-      const personalizedExercise =
-        previousSession?.analysis?.personalizedExercise;
-
-      const isSyllablePractice = exercise.title
-        .toLowerCase()
-        .includes("syllable");
-
-      if (isSyllablePractice) {
-        const syllableItems =
-          personalizedExercise?.syllableItems ?? [];
-
-        const uniqueSyllableItems = Array.from(
-          new Set(
-            syllableItems
-              .map((item) => item.trim())
-              .filter(Boolean),
-          ),
-        );
-
-        setPersonalizedItems(
-          uniqueSyllableItems.slice(0, 10),
-        );
-
-        return;
-      }
-
-      const targetWords =
-        personalizedExercise?.targetWords ??
-        previousSession?.analysis?.targetWords?.map(
-          (word) => word.word,
-        ) ??
-        [];
-
-      const uniqueTargetWords = Array.from(
-        new Set(
-          targetWords
-            .map((word) => word.trim())
-            .filter(Boolean)
-            .map((word) => word.toLowerCase()),
-        ),
-      );
-
-      setPersonalizedItems(
-        uniqueTargetWords.slice(0, 5),
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [exercise.player, exercise.title]);
-
-  // The timer reaching zero ends the session on its own.
+  // The timer reaching zero ends the session automatically.
   useEffect(() => {
     if (timer.finished && !savedRef.current) {
       void save(timer.elapsed);
@@ -389,8 +495,7 @@ export function ExerciseRunner({
 
   async function handleStart() {
     if (!startedAtRef.current) {
-      startedAtRef.current =
-        new Date().toISOString();
+      startedAtRef.current = new Date().toISOString();
     }
 
     if (recordingEnabled) {
@@ -424,6 +529,16 @@ export function ExerciseRunner({
 
   const started = timer.elapsed > 0;
 
+  const exerciseForPlayer: Exercise = personalizedContent
+    ? {
+        ...exercise,
+        content: {
+          ...exercise.content,
+          ...personalizedContent,
+        },
+      }
+    : exercise;
+
   if (resultForReview?.analysis) {
     return (
       <div className="mx-auto w-full max-w-2xl space-y-6 px-4 py-10 sm:px-6">
@@ -437,16 +552,12 @@ export function ExerciseRunner({
           </h1>
         </div>
 
-        <AnalysisCard
-          analysis={resultForReview.analysis}
-        />
+        <AnalysisCard analysis={resultForReview.analysis} />
 
         <div className="flex justify-center">
           <Button
             size="lg"
-            onClick={() =>
-              router.push("/session/summary")
-            }
+            onClick={() => router.push("/session/summary")}
           >
             Continue
           </Button>
@@ -511,10 +622,9 @@ export function ExerciseRunner({
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
           >
-            {DIFFICULTY_LABEL[level]} ·{" "}
+            {DIFFICULTY_LABEL[level]} Â·{" "}
             {Math.round(
-              exercise.difficulties[level]
-                .durationSeconds / 60,
+              exercise.difficulties[level].durationSeconds / 60,
             )}
             m
           </button>
@@ -524,10 +634,7 @@ export function ExerciseRunner({
       {!started ? (
         <ul className="mb-6 space-y-2 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
           {exercise.instructions.map((line) => (
-            <li
-              key={line}
-              className="flex gap-2"
-            >
+            <li key={line} className="flex gap-2">
               <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
               {line}
             </li>
@@ -548,9 +655,9 @@ export function ExerciseRunner({
       ) : null}
 
       {recordingEnabled &&
-      started &&
-      (recorder.state === "recording" ||
-        recorder.state === "paused") ? (
+        started &&
+        (recorder.state === "recording" ||
+          recorder.state === "paused") ? (
         <div className="mb-4 flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
           <Circle
             className={cn(
@@ -568,12 +675,11 @@ export function ExerciseRunner({
       ) : null}
 
       <Player
-        exercise={exercise}
+        exercise={exerciseForPlayer}
         config={config}
         timer={timer}
-        personalizedPassage={
-          personalizedPassage ?? undefined
-        }
+        dailyPassage={dailyPassage ?? undefined}
+        personalizedPassage={personalizedPassage ?? undefined}
         personalizedItems={personalizedItems}
       />
 
@@ -621,11 +727,7 @@ export function ExerciseRunner({
             size="lg"
             className="min-w-40"
             onClick={handleStart}
-            disabled={
-              saving ||
-              analyzing ||
-              timer.finished
-            }
+            disabled={saving || analyzing || timer.finished}
           >
             {saving || analyzing ? (
               <Loader2 className="size-4 animate-spin" />
@@ -636,9 +738,9 @@ export function ExerciseRunner({
             )}
 
             {analyzing
-              ? "Analyzing your voice…"
+              ? "Analyzing your voiceâ€¦"
               : saving
-                ? "Saving…"
+                ? "Savingâ€¦"
                 : timer.running
                   ? "Pause"
                   : started

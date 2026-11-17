@@ -66,7 +66,7 @@ function resolvePhase(phases: Phase[], elapsed: number) {
   };
 }
 
-export function BreathingPlayer({ config, timer }: PlayerProps) {
+export function BreathingPlayer({ exercise, config, timer }: PlayerProps) {
   const pattern = config.pattern ?? { inhale: 4, hold: 2, exhale: 4 };
   const phases = buildCycle(pattern);
   const { phase, remaining, scale, cycleNumber } = resolvePhase(
@@ -127,6 +127,12 @@ export function BreathingPlayer({ config, timer }: PlayerProps) {
           </span>
         ) : null}
       </div>
+
+      {exercise.content?.tips?.length ? (
+        <p className="max-w-md rounded-lg bg-muted/60 p-3 text-center text-xs text-muted-foreground">
+          {exercise.content.tips.join(" ")}
+        </p>
+      ) : null}
     </div>
   );
 }

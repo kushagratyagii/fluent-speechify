@@ -26,17 +26,17 @@ function toAccount(user: {
 export const authService = {
   async getAccount(): Promise<Account | null> {
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
 
     if (error) {
       throw new AuthError(error.message);
     }
 
-    if (!user) return null;
+    if (!session?.user) return null;
 
-    return toAccount(user);
+    return toAccount(session.user);
   },
 
   async isAuthenticated(): Promise<boolean> {

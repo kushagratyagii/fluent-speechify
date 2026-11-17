@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -28,11 +30,33 @@ class TargetWord(BaseModel):
     evidence_count: int = Field(ge=1)
 
 
+class ReadingPassage(BaseModel):
+    id: str
+    title: str
+    kind: Literal["paragraph", "story", "quote", "article", "tongue_twister"] = "paragraph"
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
+    sentences: list[str] = Field(default_factory=list)
+
+
+class GuidedStep(BaseModel):
+    label: str
+    seconds: int = Field(ge=5, le=180)
+    detail: str
+
+
+class PersonalizedExerciseContent(BaseModel):
+    items: list[str] = Field(default_factory=list)
+    passages: list[ReadingPassage] = Field(default_factory=list)
+    steps: list[GuidedStep] = Field(default_factory=list)
+    tips: list[str] = Field(default_factory=list)
+
+
 class PersonalizedExercise(BaseModel):
     title: str
     text: str
     target_words: list[str] = Field(default_factory=list)
     syllable_items: list[str] = Field(default_factory=list)
+    personalized_content: dict[str, PersonalizedExerciseContent] = Field(default_factory=dict)
 
 class AnalyzeResponse(BaseModel):
     session_id: str | None = Field(default=None, description="Echoes the caller's exercise-session id, if provided")

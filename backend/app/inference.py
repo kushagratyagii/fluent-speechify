@@ -335,10 +335,13 @@ def personalize_audio(
 )
 
         exercise_data["syllable_items"] = syllable_items
-
-        exercise = PersonalizedExercise(
-            **exercise_data
+        exercise_data["personalized_content"] = personalizer.generate_exercise_content(
+            target_words=[target.word for target in targets[:5]],
+            syllable_items=syllable_items,
+            transcript=transcript,
         )
+
+        exercise = PersonalizedExercise(**exercise_data)
 
         return (
             transcript,
