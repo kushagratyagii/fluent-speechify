@@ -1,13 +1,11 @@
----
-title: Fluent Speech Api
-emoji: 🏆
-colorFrom: pink
-colorTo: gray
+﻿---
+title: Fluent Speech API
+emoji: 🎤
+colorFrom: blue
+colorTo: purple
 sdk: gradio
-sdk_version: 6.32.0
-python_version: '3.12'
 app_file: app.py
 pinned: false
+packages:
+  - ffmpeg
 ---
-
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
