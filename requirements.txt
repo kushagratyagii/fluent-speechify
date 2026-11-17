@@ -1,4 +1,4 @@
-transformers==4.44.2
+﻿transformers>=5.0.0
 numpy==1.26.4
 soundfile==0.12.1
 openai
