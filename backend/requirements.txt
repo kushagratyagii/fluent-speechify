@@ -33,3 +33,4 @@ langgraph-prebuilt==1.1.0
 langgraph-sdk==0.4.5
 langsmith==0.14.4
 tiktoken==0.14.0
+pydantic-settings

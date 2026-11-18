@@ -1,3 +1,6 @@
+
+import { Client } from "@gradio/client";
+
 import type {
   DisfluencyBreakdown,
   Severity,
@@ -5,21 +8,12 @@ import type {
   SpeechAnalysisClip,
 } from "@/types";
 
-/**
- * Base URL of the FastAPI backend (backend/app/main.py). Must be set via
- * NEXT_PUBLIC_ANALYSIS_API_URL for production builds -- it's a client-side
- * fetch, so the var has to be public and baked in at build time, same as
- * any other Next.js NEXT_PUBLIC_* value. Falls back to the local dev
- * server so `npm run dev` works against `uvicorn app.main:app --reload`
- * with zero config.
- */
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_ANALYSIS_API_URL ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_ANALYSIS_API_URL ??
+  "https://kushagratyagii-fluent-speech-api.hf.space";
 
-/** The backend is a separate optional service -- give up well before the
- * user would notice the UI hanging, rather than blocking the save flow. */
-const ANALYZE_TIMEOUT_MS = 30_000;
-const HEALTH_TIMEOUT_MS = 3_000;
+const ANALYZE_TIMEOUT_MS = 180_000;
+const HEALTH_TIMEOUT_MS = 5_000;
 
 export class AnalysisUnavailableError extends Error { }
 
@@ -81,15 +75,12 @@ function toAnalysis(raw: RawAnalyzeResponse): SpeechAnalysis {
     dominantDisfluencyType:
       (raw.dominant_disfluency_type as SpeechAnalysis["dominantDisfluencyType"]) ??
       null,
-
     transcript: raw.transcript,
-
     targetWords: (raw.target_words ?? []).map((word) => ({
       word: word.word,
       score: word.score,
       evidenceCount: word.evidence_count,
     })),
-
     personalizedExercise: raw.personalized_exercise
       ? {
         title: raw.personalized_exercise.title,
@@ -98,12 +89,36 @@ function toAnalysis(raw: RawAnalyzeResponse): SpeechAnalysis {
         syllableItems: raw.personalized_exercise.syllable_items,
       }
       : null,
-
     modelVersion: raw.model_version,
-    warnings: raw.warnings,
+    warnings: raw.warnings ?? [],
   };
 }
 
+// Reuse one Gradio connection instead of reconnecting for every recording.
+let gradioClient: Awaited<ReturnType<typeof Client.connect>> | null = null;
+
+async function getGradioClient() {
+  if (!gradioClient) {
+    gradioClient = await Client.connect(API_BASE_URL);
+  }
+  return gradioClient;
+}
+
+// Convert browser audio into the Base64 string expected by the Space.
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(i, i + chunkSize),
+    );
+  }
+
+  return btoa(binary);
+}
 
 export interface GeneratedPassage {
   title: string;
@@ -119,159 +134,98 @@ export interface PersonalizationHistoryItem {
 }
 
 export const analysisService = {
-  /**
-   * Cheap readiness check. Call this before showing the mic toggle as
-   * enabled -- there's no point letting the user opt in to a recording
-   * that can never be analyzed because the backend isn't deployed yet or
-   * hasn't finished loading its checkpoint.
-   */
   async checkHealth(): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      HEALTH_TIMEOUT_MS,
+    );
 
-      const res = await fetch(`${API_BASE_URL}/health`, {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`, {
         signal: controller.signal,
       });
 
-      clearTimeout(timeout);
+      if (!response.ok) return false;
 
-      if (!res.ok) return false;
+      const body = await response.json();
 
-      const body = (await res.json()) as {
-        model_loaded: boolean;
-      };
-
-      return body.model_loaded;
+      return body.status === "ok" && body.model_loaded === true;
     } catch {
-      // Network error, timeout, backend not deployed -- all the same to
-      // the caller: analysis isn't available right now.
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   },
 
-  /**
-   * Uploads a recorded clip for analysis. Throws AnalysisUnavailableError
-   * on any failure (network, timeout, non-2xx, bad audio) -- callers
-   * should catch this and continue the session save without analysis
-   * rather than let the whole session fail because the ML service is down.
-   */
   async analyze(
     audioBlob: Blob,
     sessionId?: string,
     personalizationHistory: PersonalizationHistoryItem[] = [],
   ): Promise<SpeechAnalysis> {
-    const form = new FormData();
+    // Personalization is not enabled in the current demo Space.
+    void personalizationHistory;
 
-    const extension = audioBlob.type.includes("mp4")
-      ? "mp4"
-      : "webm";
-
-    form.append(
-      "audio_file",
-      audioBlob,
-      `session.${extension}`,
-    );
-
-    if (sessionId) {
-      form.append("session_id", sessionId);
-    }
-
-    if (personalizationHistory.length > 0) {
-      form.append(
-        "personalization_history",
-        JSON.stringify(personalizationHistory),
-      );
-    }
-
-    const controller = new AbortController();
-
-    const timeout = setTimeout(
-      () => controller.abort(),
-      ANALYZE_TIMEOUT_MS,
-    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/v1/analyze`,
-        {
-          method: "POST",
-          body: form,
-          signal: controller.signal,
-        },
-      );
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new AnalysisUnavailableError("The audio recording is empty.");
+      }
 
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null);
+      const audioBase64 = await blobToBase64(audioBlob);
+      const client = await getGradioClient();
 
+      const prediction = client.predict("/analyze", {
+        audio_base64: audioBase64,
+        session_id: sessionId ?? "",
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new AnalysisUnavailableError(
+            "Analysis timed out. Please try a shorter recording.",
+          )),
+          ANALYZE_TIMEOUT_MS,
+        );
+      });
+
+      const result = await Promise.race([
+        prediction,
+        timeoutPromise,
+      ]);
+
+      const responseData = result.data as unknown as RawAnalyzeResponse[];
+      const raw = responseData?.[0];
+
+      if (!raw || !Array.isArray(raw.clips)) {
         throw new AnalysisUnavailableError(
-          detail?.detail ??
-          `Analysis failed with status ${res.status}`,
+          "The speech analysis service returned an invalid response.",
         );
       }
 
-      const raw = (await res.json()) as RawAnalyzeResponse;
-
       return toAnalysis(raw);
-    } catch (err) {
-      if (err instanceof AnalysisUnavailableError) {
-        throw err;
+    } catch (error) {
+      if (error instanceof AnalysisUnavailableError) {
+        throw error;
       }
 
       throw new AnalysisUnavailableError(
-        err instanceof Error
-          ? err.message
-          : "Analysis request failed",
+        error instanceof Error
+          ? error.message
+          : "Speech analysis failed.",
       );
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     }
   },
 
-  /** Generate the daily passage, personalized using previous speech sessions. */
-  async generatePassage(input: {
+  async generatePassage(_input: {
     difficulty: "beginner" | "intermediate" | "advanced";
     targetWords?: string[];
   }): Promise<GeneratedPassage> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/v1/generate-passage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "daily",
-          difficulty: input.difficulty,
-          target_words: input.targetWords ?? [],
-        }),
-        signal: controller.signal,
-      });
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new AnalysisUnavailableError(
-          data?.detail ?? `Passage generation failed (${response.status})`,
-        );
-      }
-
-      if (!data?.title || !Array.isArray(data.sentences)) {
-        throw new AnalysisUnavailableError("The AI returned an invalid passage.");
-      }
-
-      return {
-        title: data.title,
-        sentences: data.sentences,
-        vocabulary: Array.isArray(data.vocabulary) ? data.vocabulary : [],
-      };
-    } catch (error) {
-      if (error instanceof AnalysisUnavailableError) throw error;
-      throw new AnalysisUnavailableError(
-        error instanceof Error ? error.message : "Passage generation failed",
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
+    throw new AnalysisUnavailableError(
+      "Passage generation is temporarily unavailable in the demo deployment.",
+    );
   },
 };

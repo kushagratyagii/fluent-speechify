@@ -264,7 +264,7 @@ export function ExerciseRunner({
       kind: "paragraph",
       difficulty,
       sentences: data.sentences,
-      vocabulary: data.vocabulary ?? [],
+      
     });
 
     async function loadDailyPassage() {

@@ -32,6 +32,11 @@ export const sessionRepository = {
         overallSeverityScore: row.severity_score ?? 0,
         overallSeverityBucket: row.severity_bucket,
         dominantDisfluencyType: row.dominant_disfluency_type,
+
+        transcript: null,
+        targetWords: [],
+        personalizedExercise: null,
+
         modelVersion: row.model_version ?? "unknown",
         warnings: [],
       },

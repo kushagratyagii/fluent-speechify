@@ -127,6 +127,7 @@ export interface ReadingPassage {
   kind: "paragraph" | "story" | "quote" | "article" | "tongue_twister";
   difficulty: Difficulty;
   sentences: string[];
+  vocabulary?: string[];
 }
 
 export interface GuidedStep {
