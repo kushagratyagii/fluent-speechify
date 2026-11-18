@@ -1,4 +1,5 @@
 import os
+import json
 import spaces
 import base64
 import tempfile
@@ -243,6 +244,101 @@ def generate_personalized_passage(target_words):
             "between words. I kept a steady pace and paused between sentences."
         ),
         "target_words": target_words,
+    }
+
+
+@app.api(
+    name="generate_passage",
+    description="Generate a reading passage for the selected difficulty and target words.",
+    concurrency_limit=2,
+    time_limit=60,
+)
+def generate_passage(
+    difficulty: str = "beginner",
+    target_words_json: str = "[]",
+):
+    allowed = {"beginner", "intermediate", "advanced"}
+    level = (difficulty or "beginner").lower().strip()
+    if level not in allowed:
+        level = "beginner"
+
+    try:
+        target_words = json.loads(target_words_json or "[]")
+        if not isinstance(target_words, list):
+            target_words = []
+        target_words = [
+            str(word).strip()[:40]
+            for word in target_words
+            if str(word).strip()
+        ][:8]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        target_words = []
+
+    sentences = None
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        try:
+            client = OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                temperature=0.4,
+                max_tokens=220,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Create a short, supportive English reading passage for speech practice. "
+                            "Return valid JSON only with keys title, sentences, vocabulary. "
+                            "sentences must be an array of 4 to 6 complete sentences; "
+                            "vocabulary must be an array of the target words used. "
+                            "Use the requested difficulty and never diagnose the reader."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps({
+                            "difficulty": level,
+                            "target_words": target_words,
+                        }),
+                    },
+                ],
+                response_format={"type": "json_object"},
+            )
+            payload = json.loads(response.choices[0].message.content or "{}")
+            generated = payload.get("sentences")
+            if isinstance(generated, list) and generated:
+                sentences = [str(item).strip() for item in generated if str(item).strip()]
+                title = str(payload.get("title") or "Daily Reading Passage")
+                vocabulary = payload.get("vocabulary", target_words)
+                if not isinstance(vocabulary, list):
+                    vocabulary = target_words
+                return {
+                    "title": title,
+                    "sentences": sentences[:8],
+                    "vocabulary": [str(word) for word in vocabulary][:8],
+                }
+        except Exception as exc:
+            print(f"Daily passage generation fallback: {exc}")
+
+    # Deterministic fallback keeps the existing endpoint usable without an API key.
+    level_text = {
+        "beginner": "I take my time and speak one sentence at a time.",
+        "intermediate": "I stay relaxed, connect each thought clearly, and keep a steady pace.",
+        "advanced": "I express detailed ideas with confidence, clarity, and natural pauses.",
+    }[level]
+    practice = (
+        "Today I will practise " + ", ".join(target_words) + ". "
+        if target_words else ""
+    )
+    return {
+        "title": "Daily Reading Passage",
+        "sentences": [
+            practice + "I choose a comfortable pace and focus on each word.",
+            level_text,
+            "I pause when I need to, breathe naturally, and continue without rushing.",
+            "Every practice session is an opportunity to become more comfortable speaking.",
+        ],
+        "vocabulary": target_words,
     }
 
 
