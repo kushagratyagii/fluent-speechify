@@ -36,7 +36,19 @@ interface RawPersonalizedExercise {
   title: string;
   text: string;
   target_words: string[];
-  syllable_items: string[];
+  syllable_items?: string[];
+  personalized_content?: Record<string, {
+    items?: string[];
+    passages?: Array<{
+      id: string;
+      title: string;
+      kind: "paragraph" | "story" | "quote" | "article" | "tongue_twister";
+      difficulty: "beginner" | "intermediate" | "advanced";
+      sentences: string[];
+    }>;
+    steps?: Array<{ label: string; seconds: number; detail: string }>;
+    tips?: string[];
+  }>;
 }
 
 interface RawAnalyzeResponse {
@@ -85,8 +97,9 @@ function toAnalysis(raw: RawAnalyzeResponse): SpeechAnalysis {
       ? {
         title: raw.personalized_exercise.title,
         text: raw.personalized_exercise.text,
-        targetWords: raw.personalized_exercise.target_words,
-        syllableItems: raw.personalized_exercise.syllable_items,
+        targetWords: raw.personalized_exercise.target_words ?? [],
+        syllableItems: raw.personalized_exercise.syllable_items ?? [],
+        personalizedContent: raw.personalized_exercise.personalized_content ?? {},
       }
       : null,
     modelVersion: raw.model_version,

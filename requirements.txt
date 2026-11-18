@@ -1,4 +1,9 @@
-﻿transformers>=5.0.0
+transformers==4.57.3
 numpy==1.26.4
 soundfile==0.12.1
-openai
+openai>=1.0.0
+faster-whisper==1.2.1
+torch
+gradio
+spaces
+huggingface_hub

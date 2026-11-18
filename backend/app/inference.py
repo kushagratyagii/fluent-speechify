@@ -322,25 +322,10 @@ def personalize_audio(
         )
 
         # Generate personalized exercise
-        exercise_data = personalizer.generate_exercise(
-            targets,
-            personalization_history=personalization_history or [],
-        )
-        syllable_items = personalizer.generate_syllable_exercise(
-    [
-        target.word
-        for target in targets[:5]
-        if target.word.strip()
-    ]
-)
-
-        exercise_data["syllable_items"] = syllable_items
-        exercise_data["personalized_content"] = personalizer.generate_exercise_content(
-            target_words=[target.word for target in targets[:5]],
-            syllable_items=syllable_items,
-            transcript=transcript,
-        )
-
+        # The current product requirement is the personalized reading passage.
+        # Keep this path independent from optional exercise-content generators.
+        # Those generators are not part of SpeechPersonalizer in this deployment.
+        exercise_data = personalizer.generate_exercise(targets)
         exercise = PersonalizedExercise(**exercise_data)
 
         return (
