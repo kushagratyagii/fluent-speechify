@@ -220,12 +220,25 @@ export const analysisService = {
     }
   },
 
-  async generatePassage(_input: {
+  async generatePassage(input: {
     difficulty: "beginner" | "intermediate" | "advanced";
     targetWords?: string[];
   }): Promise<GeneratedPassage> {
-    throw new AnalysisUnavailableError(
-      "Passage generation is temporarily unavailable in the demo deployment.",
-    );
+    try {
+      const client = await Client.connect(API_BASE_URL);
+
+      const result = await client.predict("/generate_passage", {
+        difficulty: input.difficulty,
+        target_words_json: JSON.stringify(input.targetWords ?? []),
+      });
+
+      const data = (result.data as any[])[0];
+      return typeof data === "string" ? JSON.parse(data) : data;
+    } catch (error) {
+      console.error("Passage generation failed:", error);
+      throw new AnalysisUnavailableError(
+        "Passage generation is temporarily unavailable.",
+      );
+    }
   },
-};
+}
